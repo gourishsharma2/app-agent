@@ -3,7 +3,10 @@
     "allow": [
       "Bash(curl -s http://localhost:4723/session/*)",
       "Bash(echo \"EXIT=$?\")",
+      "Bash(grep *)",
+      "WebSearch",
       "Bash(.claude/skills/launchApplication/scripts/launch_environment.sh *)",
+      "Bash(.claude/skills/launchApplication/scripts/close_environment.sh *)",
       "Bash(adb devices *)",
       "Bash(adb shell *)",
       "Bash(curl -s -X POST http://localhost:4723/session -H 'Content-Type: application/json' -d '{ *)",

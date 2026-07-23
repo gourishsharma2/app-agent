@@ -12,3 +12,7 @@
 
 ### Mac OS ###
 .DS_Store
+
+### driveFlow skill (transient run state) ###
+.claude/skills/driveFlow/.session_state
+.claude/skills/driveFlow/screenshots/

@@ -24,6 +24,27 @@ This script is the fix: ONE fixed entry point with a stable path, so
 (`Bash(.claude/skills/driveFlow/scripts/appium_action.sh *)`) and stop
 prompting.
 
+## Staying prompt-free for everyone, in every session
+
+This repo is shared across multiple people. `.claude/settings.json` is
+committed and shared — every allowlist rule needed to run a flow must live
+there. `.claude/settings.local.json` is per-user and per-machine, is not
+committed, and does not help a teammate or a future session on a different
+machine; anything added only there (e.g. a rule tied to one specific emulator
+serial or an absolute path under one user's home directory) will re-prompt
+for everyone else, and can even re-prompt for the same user later if the
+detail it's pinned to (like the emulator serial) changes.
+
+So: never invent a new raw `curl`/`adb`/`chmod` one-liner to get something
+done. If a task needs a new capability (e.g. capturing a screenshot), add a
+new subcommand to `appium_action.sh` (or `launch_environment.sh` /
+`close_environment.sh` for environment setup/teardown) and call it through
+the existing fixed script path — that path is already allowlisted, so nothing
+new needs to be added to settings for it to stay prompt-free, for anyone,
+forever. If a script path itself is genuinely new (not a new subcommand of an
+existing script), add its allowlist rule to `.claude/settings.json`, not
+`.claude/settings.local.json`.
+
 ## Usage
 
 The active session id is tracked internally by the script (a state file next
@@ -44,18 +65,28 @@ call is what keeps this prompt-free.
 #    type text via adb, and read the screen between steps to confirm you
 #    landed where the doc says you should.
 .claude/skills/driveFlow/scripts/appium_action.sh tap <x> <y>
+.claude/skills/driveFlow/scripts/appium_action.sh long-press <x> <y> [durationMs]  # default 800ms
+.claude/skills/driveFlow/scripts/appium_action.sh double-tap <x> <y>
 .claude/skills/driveFlow/scripts/appium_action.sh type "some text"
+.claude/skills/driveFlow/scripts/appium_action.sh back                 # Android hardware back button
+.claude/skills/driveFlow/scripts/appium_action.sh hide-keyboard        # dismiss the soft keyboard, if shown
+.claude/skills/driveFlow/scripts/appium_action.sh swipe <x1> <y1> <x2> <y2> [durationMs]  # raw custom swipe
+.claude/skills/driveFlow/scripts/appium_action.sh scroll <up|down|left|right>             # full-screen directional swipe
+.claude/skills/driveFlow/scripts/appium_action.sh scroll-to "some text" [maxScrolls]      # scroll down + check repeatedly until found (default 10 scrolls)
 .claude/skills/driveFlow/scripts/appium_action.sh source              # prints the current UI hierarchy XML
 .claude/skills/driveFlow/scripts/appium_action.sh contains "some text" # exit 0/1, for a quick screen check
+.claude/skills/driveFlow/scripts/appium_action.sh find "some text"     # prints bounds="[x1,y1][x2,y2]" for each matching element
+.claude/skills/driveFlow/scripts/appium_action.sh wait-for "some text" [timeoutSeconds]        # poll until it appears (default 30s)
+.claude/skills/driveFlow/scripts/appium_action.sh wait-until-gone "some text" [timeoutSeconds]  # poll until it disappears (default 30s) — for loading states
+.claude/skills/driveFlow/scripts/appium_action.sh screenshot [name]    # saves a PNG under .claude/skills/driveFlow/screenshots/, prints the path — Read that path to view it
 
 # 3. Always close the session when done — this also clears the state file.
 .claude/skills/driveFlow/scripts/appium_action.sh close-session
 ```
 
-`sleep <n>` and `grep ...` between steps are fine as their own separate calls
-too — both are already unconditionally auto-allowed by Claude Code, so they
-don't need an allowlist entry and won't prompt either, as long as they aren't
-combined into the same command line as something else.
+Never fall back to a raw `adb exec-out screencap` or `adb shell screencap` one-liner to grab a screenshot — that reintroduces the exact hand-rolled-command problem this skill exists to avoid (see "Why this exists" above), since a device-serial-specific command can't be allowlisted stably. Use the `screenshot` subcommand above instead — it resolves the emulator serial itself and stays under the one already-allowlisted script path.
+
+Likewise, never pipe `source`'s output into a raw `grep` call (or redirect it to a file under `/tmp` to grep later) to find an element's coordinates — despite what earlier versions of this doc claimed, `grep` is **not** unconditionally auto-allowed in practice, and redirecting output to a file plus reading it back from outside the project root (`/tmp`) each need their own permission on top of that. Use the `find` subcommand above instead: it does the filtering internally (inside the already-allowlisted script) and prints just the `bounds="..."` you need, with nothing written outside the project and no separate `grep`/`Read` call required. `sleep <n>` by itself, with no piping, is genuinely auto-allowed and fine to use between steps.
 
 Note: `noReset` means the app process and its state persist across sessions —
 reopening a session resumes wherever the app was left (e.g. mid-flow on some
@@ -65,12 +96,40 @@ uninstall+reinstall actually resets app state.
 ## Finding tap coordinates
 
 Read the flow doc's screenshot (under `screenshots or figma Links/screens/`) to see roughly where an
-element sits, then confirm exact bounds from `source` output (elements are
+element sits, then confirm exact bounds with `find "<content-desc text>"` (elements are
 Jetpack Compose views identified mostly by `content-desc`, rarely
-`resource-id`). Compose can merge several UI elements into one large
+`resource-id`) rather than reading the full `source` dump and grepping it yourself.
+Compose can merge several UI elements into one large
 accessibility node — tap near where the element visually appears within that
-merged region, not just its center, and re-check `source` after tapping to
+merged region, not just its center, and re-check `source`/`contains` after tapping to
 confirm the screen actually changed.
+
+## Scrolling and other gestures
+
+For a doc instruction like "scroll down until X is visible," don't hand-roll a
+tap-then-`contains`-then-tap-again loop — use `scroll-to "X" [maxScrolls]` in
+one call; it scrolls and re-checks internally and reports how many scrolls it
+took (or that it gave up after the max). For a single scroll without a target
+to search for, use `scroll <up|down|left|right>`, which swipes across the
+full screen height/width automatically (no need to compute coordinates
+yourself). `swipe <x1> <y1> <x2> <y2>` is there for anything more specific
+(e.g. a custom carousel) that the directional `scroll` doesn't fit.
+`long-press`, `double-tap`, and `back` (the hardware back button) cover the
+other common gestures a flow doc might call for; `hide-keyboard` is useful
+right after `type` if an on-screen keyboard is covering a button you need to
+tap next.
+
+## Waiting for loading states
+
+Some screens show a transient loading state (e.g. "Taking time in getting
+your vehicle details...") before real content appears. Don't hand-roll a
+`sleep`+`contains` polling loop in a background shell for this — use
+`wait-until-gone "<loading text>" [timeoutSeconds]` to poll for the loading
+text to disappear, or `wait-for "<text>" [timeoutSeconds]` to poll for
+content to appear, both inside the one already-allowlisted script. If a
+`wait-until-gone`/`wait-for` call times out, that's a real signal worth
+reporting as-is (e.g. "list never finished loading after 30s") rather than
+silently retrying forever or improvising a longer wait outside the script.
 
 ## Checking assertions
 
@@ -87,13 +146,35 @@ If a step has no Assertions list, fall back to the prior behavior: read
 
 ## Scope
 
-This only drives the UI and reads the screen — it doesn't persist results
-across runs. It's for verifying a documented flow still works on a given
-build. Turning a flow into a real regression test (Page Object + TestNG) is a
-separate, explicit step.
+This only drives the UI and reads the screen — by default it doesn't persist
+results across runs. It's for verifying a documented flow still works on a
+given build. Turning a flow into a real regression test (Page Object + TestNG)
+is a separate, explicit step.
 
 Once the whole task is done (flow driven and verified), close the webdriver
 session with `close-session` as above, then optionally tear down the whole
 environment (Appium server + emulator) with
 `.claude/skills/launchApplication/scripts/close_environment.sh` — see that
 skill's "Tearing the environment down" section.
+
+## Reporting results
+
+If the user asks to save/store the results of a run (or the `tests/*.md` doc
+being driven has its own "Reporting" section), write a report under
+`execution/report/` instead of only reporting back in chat:
+
+- Filename: `execution/report/<test-file-name>_<YYYY-MM-DD_HHMM>.md`
+  (timestamp from the current date/time, so repeat runs don't overwrite each
+  other).
+- Content: a per-step Pass/Fail table — one row per numbered step in the
+  test/flow doc, columns `Step | Description | Result | Notes` — plus an
+  overall Pass/Fail line at the top. `Notes` should call out exactly which
+  assertion(s) failed, if any.
+- A step is Fail if any one of its listed assertions fails; capture the
+  specific `contains` check(s) that didn't match in `Notes`.
+- Raw evidence (full `source` XML dumps per step) is optional and, if
+  captured, goes under `execution/logs/` with the same base filename — the
+  report itself should stay a concise table, not a dump of page source.
+
+This is opt-in persistence, separate from the default no-persistence scope
+above.

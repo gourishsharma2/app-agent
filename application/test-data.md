@@ -2,8 +2,10 @@
 
 ## Login Credentials
 
-| Field | Value |
-|---|---|
-| Mobile Number | 9315206357 |
-| Password | 2g1Mp8 |
-| User Code (Prod) | WE7478145 |
+| Field | Value            |
+|---|------------------|
+| Mobile Number | 9355098542       |
+| Password | Marketplace@4321 |
+| User Code (Prod) | WE25622          |
+
+These credentials are for the **Production** environment — set the login screen's Staging/Production toggle to Production before using them (see `application/environments.md`).

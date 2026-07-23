@@ -89,3 +89,12 @@ explicit last step, not something `launch_environment.sh` does on its own.
 It stops whatever emulator (`adb emu kill`) and Appium server process (found
 via the port in `appiumServerUrl`) are currently running, and is a safe no-op
 if either is already stopped.
+
+Both `launch_environment.sh` and `close_environment.sh` are allowlisted by
+their fixed script paths in the shared, committed `.claude/settings.json`, so
+running either never prompts for permission — for any user, in any session.
+Never replace a call to these scripts with raw `adb`/`curl` one-liners, and if
+new environment-setup/teardown behavior is needed, add it as a new step
+inside these scripts rather than a one-off shell command — see driveFlow's
+"Staying prompt-free for everyone, in every session" section for why this
+matters in a repo shared across multiple people.

@@ -159,22 +159,21 @@ skill's "Tearing the environment down" section.
 
 ## Reporting results
 
-If the user asks to save/store the results of a run (or the `tests/*.md` doc
-being driven has its own "Reporting" section), write a report under
-`execution/report/` instead of only reporting back in chat:
+Every run gets a saved report — this is automatic, not something the user
+needs to ask for. Use `.claude/skills/generateReport/scripts/report_tool.sh`
+(`start` before driving, `end` after) and hand the results off to the
+`report-writer` agent, following the `generateReport` skill
+(`.claude/skills/generateReport/SKILL.md`) for the exact filename
+(`execution/report/<flow_name>-<yyyyMMdd-HHmmss>.md`, directory created if
+missing) and report format (metadata block + per-step/per-assertion table,
+overall ✅ Pass / ❌ Fail).
 
-- Filename: `execution/report/<test-file-name>_<YYYY-MM-DD_HHMM>.md`
-  (timestamp from the current date/time, so repeat runs don't overwrite each
-  other).
-- Content: a per-step Pass/Fail table — one row per numbered step in the
-  test/flow doc, columns `Step | Description | Result | Notes` — plus an
-  overall Pass/Fail line at the top. `Notes` should call out exactly which
-  assertion(s) failed, if any.
-- A step is Fail if any one of its listed assertions fails; capture the
-  specific `contains` check(s) that didn't match in `Notes`.
-- Raw evidence (full `source` XML dumps per step) is optional and, if
-  captured, goes under `execution/logs/` with the same base filename — the
-  report itself should stay a concise table, not a dump of page source.
+A step is Fail if any one of its listed assertions fails; capture the
+specific `contains` check(s) that didn't match in `Notes`. Raw evidence
+(full `source` XML dumps per step) is optional and, if captured, goes under
+`execution/logs/` with the same base filename — the report itself should
+stay a concise table, not a dump of page source.
 
-This is opt-in persistence, separate from the default no-persistence scope
-above.
+This always happens, whether the run passes, fails partway through, or the
+`tests/*.md` doc being driven has its own "Reporting" section — none of
+that is opt-in anymore.

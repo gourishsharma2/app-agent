@@ -191,8 +191,13 @@ find_aapt() {
 
 AAPT_BIN="$(find_aapt || true)"
 PACKAGE_NAME=""
+VERSION_CODE=""
+VERSION_NAME=""
 if [[ -n "$AAPT_BIN" ]]; then
-  PACKAGE_NAME=$("$AAPT_BIN" dump badging "$ABS_APK_PATH" 2>/dev/null | awk -F"'" '/^package: name=/{print $2; exit}')
+  BADGING="$("$AAPT_BIN" dump badging "$ABS_APK_PATH" 2>/dev/null)"
+  PACKAGE_NAME=$(echo "$BADGING" | awk -F"'" '/^package: name=/{print $2; exit}')
+  VERSION_CODE=$(echo "$BADGING" | grep -o "versionCode='[^']*'" | head -1 | sed -E "s/versionCode='([^']*)'/\1/")
+  VERSION_NAME=$(echo "$BADGING" | grep -o "versionName='[^']*'" | head -1 | sed -E "s/versionName='([^']*)'/\1/")
 fi
 
 if [[ -n "$PACKAGE_NAME" ]]; then
@@ -253,5 +258,16 @@ else
   warn "Could not determine package name via aapt — skipping package-name verification. Appium already reported a successful session/install above."
 fi
 
+INSTALL_STATE_FILE="$SCRIPT_DIR/../.last_install_state"
+{
+  echo "APK_PATH=$ABS_APK_PATH"
+  echo "APK_FILENAME=$(basename "$ABS_APK_PATH")"
+  echo "PACKAGE_NAME=${PACKAGE_NAME:-unknown}"
+  echo "VERSION_CODE=${VERSION_CODE:-unknown}"
+  echo "VERSION_NAME=${VERSION_NAME:-unknown}"
+  echo "DEVICE_SERIAL=$DEVICE_SERIAL"
+  echo "INSTALLED_AT=$(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+} > "$INSTALL_STATE_FILE"
+
 echo ""
-ok "Environment ready — Appium: $APPIUM_URL | Device: $DEVICE_SERIAL | APK: $ABS_APK_PATH"
+ok "Environment ready — Appium: $APPIUM_URL | Device: $DEVICE_SERIAL | APK: $ABS_APK_PATH | Package: ${PACKAGE_NAME:-unknown} | versionCode: ${VERSION_CODE:-unknown} | versionName: ${VERSION_NAME:-unknown}"

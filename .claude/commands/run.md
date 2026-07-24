@@ -58,5 +58,6 @@ Running flow "<flow_name>" using APK "apk/<apk_name>"...
 Then actually run it, reusing existing project mechanisms rather than hand-rolled commands:
 
 1. Prepare the environment and install the build via the `launchApplication` skill, passing the resolved absolute path to `apk/<apk_name>`.
-2. Drive the resolved flow doc (`flow/<flow_name>.md` or the matching `tests/<category>/<flow_name>.md`) via the `driveFlow` skill (or delegate to the `flow-runner` agent), checking each step's Assertions as usual.
-3. Report the per-step pass/fail result back to the user in chat. Only persist a report under `execution/report/` if the user separately asks to save/store results, per `driveFlow`'s existing "Reporting results" convention — don't do it by default.
+2. Drive the resolved flow doc (`flow/<flow_name>.md` or the matching `tests/<category>/<flow_name>.md`) via the `driveFlow` skill (or delegate to the `flow-runner` agent), checking each step's Assertions as usual. This includes `report_tool.sh start`/`end` around the run — see `generateReport`'s SKILL.md.
+3. Report the per-step pass/fail result back to the user in chat.
+4. Always generate and save the run report, regardless of pass/fail/partial — this is automatic, not conditional on the user asking. Hand off to the `report-writer` agent (or follow `generateReport`'s SKILL.md yourself) with: the flow/test doc path, its precondition if any, the per-step/per-assertion results from step 2, and the `START=`/`END=`/`DURATION=` values. `report-writer` creates `execution/report/` if needed and writes the file — report its saved path back to the user alongside the chat summary from step 3.

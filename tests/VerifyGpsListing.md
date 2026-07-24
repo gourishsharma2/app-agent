@@ -62,9 +62,9 @@ This test only drives and verifies the UI per `driveFlow`'s scope — it does no
 
 ## Reporting
 
-Store the results of each run under `execution/report/` (see `driveFlow`'s "Reporting results" section for the general convention):
-
-- Filename: `execution/report/VerifyGpsListing_<YYYY-MM-DD_HHMM>.md`
-- A Pass/Fail table with one row per step above — Precondition, Step 1, Step 2, Step 3, Step 4 (and the DL01GH6543 card check as its own row under Step 4) — columns `Step | Description | Result | Notes`.
-- An overall Pass/Fail line at the top of the report.
-- If any assertion fails, note the exact `contains` check that failed in that row's `Notes` column.
+Every run of this test is automatically reported per the project's standard
+convention — see `driveFlow`'s "Reporting results" section and the
+`generateReport` skill (`.claude/skills/generateReport/SKILL.md`) for the
+filename, format, and script usage. Include one row per step above —
+Precondition, Step 1, Step 2, Step 3, Step 4 (and the DL01GH6543 card check
+as its own row under Step 4).

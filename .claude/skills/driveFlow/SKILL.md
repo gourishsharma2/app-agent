@@ -162,11 +162,13 @@ skill's "Tearing the environment down" section.
 Every run gets a saved report — this is automatic, not something the user
 needs to ask for. Use `.claude/skills/generateReport/scripts/report_tool.sh`
 (`start` before driving, `end` after) and hand the results off to the
-`report-writer` agent, following the `generateReport` skill
+`report-writer` agent, including `end`'s full output verbatim (`START=`,
+`END=`, `DURATION=`, and its `TOKENS_*` lines — don't drop those), following
+the `generateReport` skill
 (`.claude/skills/generateReport/SKILL.md`) for the exact filename
-(`execution/report/<flow_name>-<yyyyMMdd-HHmmss>.md`, directory created if
+(`execution/report/<flow_name>-<yyyyMMdd-HHmmss>.html`, directory created if
 missing) and report format (metadata block + per-step/per-assertion table,
-overall ✅ Pass / ❌ Fail).
+overall ✅ Pass / ❌ Fail). Only HTML is generated — no Markdown report file.
 
 A step is Fail if any one of its listed assertions fails; capture the
 specific `contains` check(s) that didn't match in `Notes`. Raw evidence

@@ -1,17 +1,22 @@
 ---
 name: generateReport
-description: Generates and saves the standardized Markdown run report for a flow/test execution into execution/report/, creating the directory if needed. Used automatically after every /run execution (and by driveFlow/report-writer directly) — not opt-in. Provides the one shared naming/timestamp/duration script so this logic isn't re-derived per command.
+description: Generates and saves the standardized Markdown AND HTML run reports for a flow/test execution into execution/report/, creating the directory if needed. Used automatically after every /run execution (and by driveFlow/report-writer directly) — not opt-in. Provides the one shared naming/timestamp/duration script (and the HtmlReportGenerator) so this logic isn't re-derived per command.
 ---
 
 # generateReport
 
-Produces one Markdown run report per execution and saves it under
-`execution/report/`, creating that directory the first time it's needed.
-This is the single, reusable source of truth for report **naming**,
-**timestamps/duration**, and **format** — every command or agent that
-finishes a flow/test run (the `/run` command, `flow-runner`,
-`report-writer`, and any future test runner) should produce its report
-through this skill rather than inventing its own filename convention.
+Produces one Markdown run report **and** one HTML run report per execution,
+both from the same run data, and saves them under `execution/report/`,
+creating that directory the first time it's needed. This is the single,
+reusable source of truth for report **naming**, **timestamps/duration**, and
+**format** — every command or agent that finishes a flow/test run (the
+`/run` command, `flow-runner`, `report-writer`, and any future test runner)
+should produce its reports through this skill rather than inventing its own
+filename convention or HTML markup.
+
+Both formats are mandatory and automatic — never write only one. The
+Markdown format and its template below are unchanged; the HTML format is
+additive.
 
 ## Reports are automatic, not opt-in
 
@@ -40,10 +45,12 @@ allowlistable path):
 #      END=<run end timestamp>
 #      DURATION=<e.g. "2m 13s" or "45s">
 
-# Call once you're ready to write the report file itself.
-.claude/skills/generateReport/scripts/report_tool.sh new-path <flow_name>
-# -> ensures execution/report/ exists, prints a unique path, e.g.:
-#      execution/report/homePage-20260724-184512.md
+# Call once you're ready to write the report files (get BOTH paths at once,
+# sharing one timestamp so the .md and .html of one run are easy to pair up).
+.claude/skills/generateReport/scripts/report_tool.sh new-paths <flow_name>
+# -> ensures execution/report/ exists, prints:
+#      MD_PATH=execution/report/homePage-20260724-184512.md
+#      HTML_PATH=execution/report/homePage-20260724-184512.html
 ```
 
 `<flow_name>` should be the flow/test doc's filename without `.md` (e.g.
@@ -51,10 +58,66 @@ allowlistable path):
 flows. Filenames include seconds (`yyyyMMdd-HHmmss`), so repeated runs never
 collide or overwrite each other.
 
-Content formatting (the metadata block, the per-step table) is **not** done
-by this script — composing that text is an LLM task. Once you have the path
-from `new-path`, write the report content to that exact path with the
-`Write` tool.
+Content formatting for Markdown (the metadata block, the per-step table) is
+**not** done by this script — composing that text is an LLM task. Once you
+have `MD_PATH`, write the Markdown content to that exact path with the
+`Write` tool, following the template below unchanged.
+
+`new-path <flow_name>` (singular, no "s") still exists and behaves exactly
+as before, for any caller that only needs the `.md` path.
+
+## Generating the HTML report (HtmlReportGenerator)
+
+The HTML report is rendered by a dedicated generator,
+`.claude/skills/generateReport/scripts/html_report_generator.js` (Node.js),
+so its markup/CSS lives in one place instead of being reinvented per report.
+It is invoked through `report_tool.sh` — never call `node` on it directly —
+so it stays behind the same allowlisted script path:
+
+```bash
+.claude/skills/generateReport/scripts/report_tool.sh render-html <HTML_PATH> <<'JSON'
+{
+  "flowName": "Home Page Flow",
+  "flowDoc": "flow/homePage.md",
+  "precondition": "None",
+  "apk": "app-release (10).apk",
+  "versionCode": "1",
+  "versionName": "23.7.0",
+  "package": "com.wheelseyeoperator.debug",
+  "platform": "android",
+  "device": "emulator-5554",
+  "runStart": "2026-07-24 18:39:15 UTC",
+  "runEnd": "2026-07-24 18:45:12 UTC",
+  "duration": "5m 57s",
+  "overallResult": "PASS",
+  "tokens": { "total": 12345, "input": 10000, "output": 2000, "cacheRead": 300, "cacheWrite": 45 },
+  "steps": [
+    { "step": "1: Home page", "assertion": "contains \"Loading Location\"", "result": "PASS", "notes": "" },
+    { "step": "2: ...", "assertion": "...", "result": "FAIL", "notes": "exact failure reason", "timestamp": "2026-07-24 18:41:02 UTC" }
+  ]
+}
+JSON
+```
+
+Notes on the JSON payload (this is the same data already gathered for the
+Markdown report — assemble it once, use it for both):
+
+- Every field is optional except `steps`; anything missing/empty renders as
+  `N/A` in the HTML (never guess or invent a value to fill a gap).
+- `tokens` may be omitted entirely if usage isn't available in this session
+  (same rule as the Markdown "not available" case) — its sub-fields render
+  as `N/A` individually.
+- `result` per step accepts `PASS`/`FAIL`/`SKIP` (case-insensitive, with or
+  without the ✅/❌/⚠️ glyphs) and is normalized to the right badge.
+- `notes` is the failure reason for a `FAIL` row (shown in Notes and in the
+  Failure Details section) — leave blank for Pass rows.
+- `timestamp` per step is optional; used only in the Failure Details section.
+- `overallResult` accepts `PASS`/`FAIL`; if omitted it's derived as `FAIL`
+  when any step failed, else `PASS` — same rule as the Markdown report.
+- The generator computes Total/Passed/Failed/Skipped/Success Rate itself —
+  don't pass precomputed statistics.
+- The Failure Details section is included automatically only when at least
+  one step is `FAIL` — nothing to do for that on the caller's side.
 
 ## Getting build/device metadata
 
@@ -110,16 +173,23 @@ Notes on filling this in:
 
 If the run fails partway through:
 
-- Still call `report_tool.sh end` and `new-path`, and still write the file —
-  a failed run's report is exactly as important as a passing one.
+- Still call `report_tool.sh end` and `new-paths`, and still write **both**
+  files — a failed run's report is exactly as important as a passing one.
 - Record the failing step's row with `❌ Fail` and put the exact failure
-  reason (e.g. the specific `contains` check that didn't match) in **Notes**.
-- Mark **Overall Result** as `❌ Fail`.
-- Any step never reached gets `⚠️ Skipped` rather than being omitted from
-  the table.
+  reason (e.g. the specific `contains` check that didn't match) in **Notes**
+  (Markdown) / `notes` (HTML JSON payload) — the same reason string in both.
+- Mark **Overall Result** as `❌ Fail` in the Markdown, and `"overallResult": "FAIL"`
+  in the HTML JSON payload.
+- Any step never reached gets `⚠️ Skipped` in the Markdown table and
+  `"result": "SKIP"` in the HTML JSON `steps` array — never omitted from
+  either.
+- The HTML report's Failure Details section renders itself automatically
+  from the `FAIL` rows in `steps` — nothing extra to do for it.
 
 ## Scope
 
-This skill only formats and persists a report from results it's given (or
+This skill only formats and persists reports from results it's given (or
 that the caller gathers via `driveFlow`) — it never drives the app or
-re-verifies assertions itself.
+re-verifies assertions itself. The HTML report is rendered by
+`html_report_generator.js`; everything else (Markdown content, JSON payload
+assembly) is composed by the calling agent from the same run data.

@@ -116,7 +116,7 @@ else
 
   AVD_NAME="${AVD_NAME:-}"
   if [[ -z "$AVD_NAME" ]]; then
-    AVD_NAME="$(emulator -list-avds 2>/dev/null | head -1)"
+    AVD_NAME="$(emulator -list-avds 2>/dev/null | grep -v '|' | head -1)"
   fi
   [[ -n "$AVD_NAME" ]] || fail "No AVD available (emulator -list-avds returned nothing). Create one first or set AVD_NAME."
 

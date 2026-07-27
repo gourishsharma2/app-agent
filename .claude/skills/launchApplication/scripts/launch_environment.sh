@@ -3,9 +3,10 @@
 # launchApplication skill — prepares the Android automation environment:
 #   1. Ensures an Appium server is running
 #   2. Ensures an Android emulator is running and fully booted
-#   3. Installs the given APK by opening an Appium/UiAutomator2 session with
+#   3. Disables the emulator's screen sleep timeout for the automation session
+#   4. Installs the given APK by opening an Appium/UiAutomator2 session with
 #      the given `app` path and autoGrantPermissions=true. See the comment
-#      above step 4 for why this uses noReset instead of fullReset.
+#      above that step for why this uses noReset instead of fullReset.
 #
 # Usage:
 #   launch_environment.sh /absolute/path/to/app.apk
@@ -157,7 +158,25 @@ done
 ok "Emulator $DEVICE_SERIAL is fully booted and ready for ADB commands."
 
 # ---------------------------------------------------------------------------
-# Step 4: Install the APK via an Appium/UiAutomator2 session
+# Step 4: Prevent the emulator's screen from sleeping mid-run
+#
+# A long flow/test can have gaps between actions (thinking time, waiting on
+# the user) long enough for the default screen timeout to kick in, which
+# blanks the display and breaks screenshot-based evidence (adb screencap
+# returns a black frame) until something wakes it back up. Push the timeout
+# out for the life of this automation session instead of recovering from it
+# mid-run.
+# ---------------------------------------------------------------------------
+STEP="Screen timeout configuration"
+info "Disabling screen sleep on $DEVICE_SERIAL for the duration of this automation session..."
+if adb -s "$DEVICE_SERIAL" shell settings put system screen_off_timeout 1800000 >/dev/null 2>&1; then
+  ok "Screen sleep timeout set to 30 minutes on $DEVICE_SERIAL."
+else
+  warn "Could not set screen_off_timeout on $DEVICE_SERIAL — screen may still sleep during a long-idle run."
+fi
+
+# ---------------------------------------------------------------------------
+# Step 5: Install the APK via an Appium/UiAutomator2 session
 #
 # Opens a session with:
 #   platformName=Android, automationName=UiAutomator2, deviceName=<detected serial>,
@@ -244,7 +263,7 @@ curl -s -X DELETE "$APPIUM_URL/session/$SESSION_ID" > /dev/null
 ok "Session closed."
 
 # ---------------------------------------------------------------------------
-# Step 5: Verify the app is actually installed on the device
+# Step 6: Verify the app is actually installed on the device
 # ---------------------------------------------------------------------------
 STEP="Post-install verification"
 

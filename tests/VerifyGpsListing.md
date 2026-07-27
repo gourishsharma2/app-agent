@@ -41,7 +41,7 @@ Verify everything shown in that step's screenshot, for the stopped vehicle cards
 - `contains "Save location"`
 - `contains "Stopped since"`
 
-### Step 4: Verify the All filter, and the DL01GH6543 card specifically
+### Step 4: Verify the All filter, and the HR36AP7846 card specifically
 
 Tap the **All (94)** chip. This corresponds to `flow/gpsListingFlow.md` Step 4.
 
@@ -50,8 +50,8 @@ First verify the top-level screen matches that step's screenshot:
 - `contains "Non Wheelseye GPS"`
 - `contains "Buy GPS to track your vehicle"`
 
-Then **scroll down** the vehicle list until the card for vehicle **`DL01GH6543`** is visible (it is not necessarily the first card — keep scrolling and re-checking `source` until it appears), and verify that specific card shows:
-- `contains "DL01GH6543"`
+Then **scroll down** the vehicle list until the card for vehicle **`HR36AP7846`** is visible (it is not necessarily the first card — keep scrolling and re-checking `source` until it appears), and verify that specific card shows:
+- `contains "HR36AP7846"`
 - `contains "Non Wheelseye GPS"` (on/near this card)
 - `contains "Buy GPS to track your vehicle"` (on/near this card)
 - `contains "Check balance"` (FASTag balance link on this card)
@@ -66,5 +66,5 @@ Every run of this test is automatically reported per the project's standard
 convention — see `driveFlow`'s "Reporting results" section and the
 `generateReport` skill (`.claude/skills/generateReport/SKILL.md`) for the
 filename, format, and script usage. Include one row per step above —
-Precondition, Step 1, Step 2, Step 3, Step 4 (and the DL01GH6543 card check
+Precondition, Step 1, Step 2, Step 3, Step 4 (and the HR36AP7846 card check
 as its own row under Step 4).

@@ -28,8 +28,8 @@ When asked to close/stop/tear down the environment, run exactly:
 .claude/skills/launchApplication/scripts/close_environment.sh
 ```
 
-- Only do this when explicitly asked — never tear down right after launching, since `flow-runner` may still need the environment alive.
-- It's a safe no-op if the emulator/Appium server are already stopped.
+- This is the standard last step after a flow/test execution has finished driving and reporting — not something that only happens if explicitly asked anymore. Never tear down right after launching, though — `flow-runner` may still need the environment alive in between; only tear down once the run is actually complete.
+- It uninstalls the app build it most recently installed (tracked in `.last_install_state`), then stops the emulator and Appium server. It's a safe no-op if the app/emulator/Appium server are already uninstalled/stopped.
 
 ## Hard rules
 

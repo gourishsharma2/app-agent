@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 #
 # launchApplication skill — tears down the Android automation environment:
-#   1. Stops the running emulator (adb emu kill)
-#   2. Stops the Appium server process
+#   1. Uninstalls the app build that was installed (package read from
+#      .last_install_state, written by launch_environment.sh)
+#   2. Stops the running emulator (adb emu kill)
+#   3. Stops the Appium server process
 #
-# Call this once the whole automation task (launch + drive flow) is done —
-# not right after launch_environment.sh, since driveFlow still needs the
-# Appium server and emulator alive in between.
+# Call this once the whole automation task (launch + drive flow + report) is
+# done — not right after launch_environment.sh, since driveFlow still needs
+# the Appium server and emulator alive in between.
 #
 # Usage:
 #   close_environment.sh
@@ -19,6 +21,7 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 CONFIG_FILE="$PROJECT_ROOT/config.properties"
+INSTALL_STATE_FILE="$SCRIPT_DIR/../.last_install_state"
 
 STEP=""
 fail() {
@@ -46,13 +49,37 @@ fi
 info "Appium URL: $APPIUM_URL"
 
 # ---------------------------------------------------------------------------
-# Step 1: Stop any running emulator(s)
+# Step 1: Uninstall the installed app build, if we know which package it was
 # ---------------------------------------------------------------------------
-STEP="Emulator shutdown"
+STEP="App uninstall"
 
 running_emulators() {
   adb devices 2>/dev/null | awk '$2=="device" && $1 ~ /^emulator-/ {print $1}'
 }
+
+PACKAGE_NAME=""
+if [[ -f "$INSTALL_STATE_FILE" ]]; then
+  PACKAGE_NAME="$(grep -E '^PACKAGE_NAME=' "$INSTALL_STATE_FILE" | tail -1 | cut -d'=' -f2-)"
+fi
+
+EMULATORS="$(running_emulators)"
+if [[ -z "$PACKAGE_NAME" ]]; then
+  info "No recorded package name in .last_install_state — skipping app uninstall."
+elif [[ -z "$EMULATORS" ]]; then
+  info "No running emulator found — skipping app uninstall for $PACKAGE_NAME."
+else
+  while IFS= read -r serial; do
+    [[ -n "$serial" ]] || continue
+    info "Uninstalling $PACKAGE_NAME from $serial ..."
+    adb -s "$serial" uninstall "$PACKAGE_NAME" >/dev/null 2>&1 || warn "Could not uninstall $PACKAGE_NAME from $serial (already removed, or not installed)."
+  done <<< "$EMULATORS"
+  ok "App uninstall step complete."
+fi
+
+# ---------------------------------------------------------------------------
+# Step 2: Stop any running emulator(s)
+# ---------------------------------------------------------------------------
+STEP="Emulator shutdown"
 
 EMULATORS="$(running_emulators)"
 if [[ -z "$EMULATORS" ]]; then
@@ -77,7 +104,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Step 2: Stop the Appium server, if running
+# Step 3: Stop the Appium server, if running
 # ---------------------------------------------------------------------------
 STEP="Appium server shutdown"
 
@@ -115,4 +142,4 @@ else
 fi
 
 echo ""
-ok "Environment torn down — Appium and emulator stopped (or were already not running)."
+ok "Environment torn down — app uninstalled, Appium and emulator stopped (or were already not running/installed)."

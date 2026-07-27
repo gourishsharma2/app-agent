@@ -46,9 +46,10 @@ Use exactly one fixed script for every action, `.claude/skills/driveFlow/scripts
 .claude/skills/driveFlow/scripts/appium_action.sh hide-keyboard
 .claude/skills/driveFlow/scripts/appium_action.sh swipe <x1> <y1> <x2> <y2> [durationMs]
 .claude/skills/driveFlow/scripts/appium_action.sh scroll <up|down|left|right>
-.claude/skills/driveFlow/scripts/appium_action.sh scroll-to "some text" [maxScrolls]
+.claude/skills/driveFlow/scripts/appium_action.sh scroll-to "some text" [up|down|left|right] [maxScrolls]
 .claude/skills/driveFlow/scripts/appium_action.sh source
 .claude/skills/driveFlow/scripts/appium_action.sh contains "some text"
+.claude/skills/driveFlow/scripts/appium_action.sh assert-all "text1" "text2" ...
 .claude/skills/driveFlow/scripts/appium_action.sh find "some text"
 .claude/skills/driveFlow/scripts/appium_action.sh wait-for "some text" [timeoutSeconds]
 .claude/skills/driveFlow/scripts/appium_action.sh wait-until-gone "some text" [timeoutSeconds]
@@ -58,7 +59,7 @@ Use exactly one fixed script for every action, `.claude/skills/driveFlow/scripts
 
 - Get `appPackage`/`appActivity` from the doc, or derive via `aapt dump badging <apk> | grep -E "launchable-activity|package:"` if not stated.
 - Tap coordinates come from the flow doc's screenshot (`screenshots or figma Links/<flow-name>/Step N.png` — read it with the Read tool) plus `find "<content-desc text>"` to get that element's exact `bounds="[x1,y1][x2,y2]"` on the live screen. Elements are Jetpack Compose views, mostly identified by `content-desc`; Compose can merge several elements into one accessibility node, so tap near where the element visually appears within that region, not just dead-center.
-- For a doc instruction like "scroll down until X is visible," use `scroll-to "X" [maxScrolls]` in one call rather than hand-rolling a tap/scroll/`contains` loop — it reports how many scrolls it took, or that it gave up after the max (report that as-is, don't silently retry beyond it).
+- For a doc instruction like "scroll down until X is visible," use `scroll-to "X" [maxScrolls]` in one call rather than hand-rolling a tap/scroll/`contains` loop — it stops the instant the substring is found, logs every attempt, and reports either how many scrolls it took, that the list stopped responding after N attempts (likely end of list), or that it gave up after the max (report any of these as-is, don't silently retry beyond it).
 - For a transient loading state (e.g. "still loading" text before real content appears), use `wait-until-gone "<loading text>" [timeoutSeconds]` (or `wait-for` for content to appear) instead of a manual `sleep`+`contains` loop or a background shell poll. If it times out, report that plainly (e.g. "list never finished loading after 30s") — that's a real result, not something to paper over by waiting longer outside the script.
 - **Never** pipe `source`'s output through a raw `grep` call yourself, and never redirect it to a file (e.g. under `/tmp`) to inspect it that way — both need permissions beyond what's allowlisted for this script, and reintroduce exactly the hand-rolled-command problem this script exists to avoid. Use `find` for coordinate/attribute lookups; use `contains`/`wait-for`/`wait-until-gone` for pass/fail and polling checks; only fall back to reading the full `source` output directly (not via a file) when you genuinely need to eyeball overall screen structure.
 - After each tap, re-check `source` (or a targeted `contains`) to confirm the screen actually changed before moving to the next step.
@@ -66,7 +67,7 @@ Use exactly one fixed script for every action, `.claude/skills/driveFlow/scripts
 
 ## Checking assertions
 
-For every step with an **Assertions** list: run `contains "<exact substring>"` for each listed string once you land on that screen, and record pass/fail per assertion. An "OR" between two assertions passes if either `contains` call succeeds. For a "not present before, present after" assertion, capture `source`/`contains` before and after the action and confirm the diff. If a step has no Assertions list, read `source` and judge by eye against the doc's description.
+For every step with an **Assertions** list: once you land on that screen (and it's finished loading — see the loading-state note above), prefer `assert-all "<substring1>" "<substring2>" ...` over one `contains` call per substring — it fetches the page source once and checks every listed string against that single snapshot, still reporting each one individually, so the pass/fail coverage is identical to checking them one at a time, just with fewer round trips. Use a single `contains "<exact substring>"` call when you only need one check. An "OR" between two assertions passes if either one is FOUND. For a "not present before, present after" assertion, capture `source`/`contains` before and after the action and confirm the diff. If a step has no Assertions list, read `source` and judge by eye against the doc's description.
 
 Always close the session when done (`close-session`), even if a step failed partway through.
 

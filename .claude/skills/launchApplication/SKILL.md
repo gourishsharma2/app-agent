@@ -44,6 +44,13 @@ message on the first failure:
 5. **Verification** — extracts the package name from the APK via `aapt` and
    confirms it via `adb shell pm list packages` before declaring success.
 
+It also extracts `versionCode`/`versionName` via the same `aapt` call and
+persists everything (APK path/filename, package name, versionCode,
+versionName, device serial, install time) to
+`.claude/skills/launchApplication/.last_install_state` (key=value lines).
+This is how `generateReport` fills in the Build/APK/Package/Platform fields
+of a run report without re-deriving them.
+
 ## Why `noReset` instead of `fullReset`
 
 `fullReset=true` uninstalls the app when the Appium session is torn down. This

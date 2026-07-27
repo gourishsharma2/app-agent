@@ -11,6 +11,27 @@ You drive one documented flow or test through the running app and verify it step
 
 Read the full flow/test doc you were asked to run (e.g. `flow/loginFlow.md`, `tests/VerifyGpsListing.md`) before doing anything. If it's a `tests/*.md` doc that references flow docs (e.g. a precondition saying "drive `flow/loginFlow.md`"), read those referenced docs too — don't guess their steps.
 
+## Recording run start/end
+
+Every run gets a report — this is automatic, not something the caller has to
+ask for. Before opening the Appium session for Step 1, run:
+
+```
+.claude/skills/generateReport/scripts/report_tool.sh start
+```
+
+Then, right after your last `close-session` call (whether the run passed,
+failed, or you stopped early because a step failed), run:
+
+```
+.claude/skills/generateReport/scripts/report_tool.sh end
+```
+
+This prints `START=`, `END=`, and `DURATION=` — include these verbatim in
+your final report-back (see "What to report back" below). Do this even on
+failure: close the session and call `end` regardless of how the run ended,
+so the report always has an accurate end time and duration.
+
 ## Driving the flow
 
 Use exactly one fixed script for every action, `.claude/skills/driveFlow/scripts/appium_action.sh`, issuing each call as its own **single plain command** (never wrapped in `$(...)`, `&&`, or combined with anything else on the same line — that breaks the settings.json allowlist match and reintroduces permission prompts):
@@ -51,15 +72,25 @@ Always close the session when done (`close-session`), even if a step failed part
 
 ## What to report back
 
-Your final answer must be a concise, structured pass/fail summary — one line per step, e.g.:
+Your final answer must be a concise, structured pass/fail summary — one line per step (and per assertion within a step where there's more than one), e.g.:
 
 ```
-Step 1: PASS
+Step 1: PASS — contains "FasTag", contains "Vehicles", ...
 Step 2: PASS
 Step 3: FAIL — "Login" button assertion not found in source
 ```
 
-Include an overall PASS/FAIL. Do not dump full `source` XML or paste screenshots back — if something failed, quote only the specific missing/unexpected substring. If the caller (or the test doc itself) asks for results to be saved, say so explicitly in your final answer (e.g. "results ready to be written to execution/report/") rather than writing the report file yourself — that's `report-writer`'s job, and it needs exactly this pass/fail summary as input.
+Include an overall PASS/FAIL, plus the `START=`/`END=`/`DURATION=` lines from
+`report_tool.sh end`. Do not dump full `source` XML or paste screenshots
+back — if something failed, quote only the specific missing/unexpected
+substring.
+
+Every run is followed by a report, automatically — never conditional on the
+caller asking. You do not write the report file yourself (no `Write` tool
+here); that's `report-writer`'s job. Make sure your final answer gives it
+everything it needs without having to ask again: the flow/test doc path
+that was driven, its precondition (if any), the per-step/per-assertion
+pass/fail summary above, and the start/end/duration lines.
 
 ## Hard rules
 

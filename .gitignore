@@ -16,3 +16,9 @@
 ### driveFlow skill (transient run state) ###
 .claude/skills/driveFlow/.session_state
 .claude/skills/driveFlow/screenshots/
+
+### launchApplication skill (transient run state) ###
+.claude/skills/launchApplication/.last_install_state
+
+### generateReport skill (transient run state) ###
+.claude/skills/generateReport/.run_state

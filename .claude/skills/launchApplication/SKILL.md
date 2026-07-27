@@ -38,10 +38,15 @@ message on the first failure:
    `emulator -list-avds` (override with `AVD_NAME=<name>` env var).
 3. **Boot completion** — polls `adb wait-for-device` + `getprop sys.boot_completed`
    until the emulator is actually ready to accept ADB commands (not just detected).
-4. **APK install** — opens an Appium session directly (`automationName=UiAutomator2`,
+4. **Screen timeout** — sets `screen_off_timeout` to 30 minutes on the device so
+   it doesn't go to sleep mid-run during normal gaps between automation actions
+   (a sleeping screen returns a black frame from `screenshot`/`adb screencap`,
+   which looks like an app problem but isn't). Non-fatal if it can't be set —
+   logged as a warning, not a failure.
+5. **APK install** — opens an Appium session directly (`automationName=UiAutomator2`,
    `deviceName=<detected emulator serial>`, `autoGrantPermissions=true`) to
    install the APK. See **Why `noReset` instead of `fullReset`** below.
-5. **Verification** — extracts the package name from the APK via `aapt` and
+6. **Verification** — extracts the package name from the APK via `aapt` and
    confirms it via `adb shell pm list packages` before declaring success.
 
 It also extracts `versionCode`/`versionName` via the same `aapt` call and
@@ -82,20 +87,31 @@ then exits non-zero. Relevant background-process logs are written to
 ## Tearing the environment down
 
 Once the whole automation task is done — `launchApplication` prepped the
-environment and `driveFlow` finished driving/verifying the flow — stop the
-Appium server and emulator with:
+environment, `driveFlow` finished driving/verifying the flow, and the report
+is saved — always uninstall the app and stop the Appium server and emulator
+with:
 
 ```bash
 .claude/skills/launchApplication/scripts/close_environment.sh
 ```
 
+This is now the standard last step after every completed run, not an
+optional cleanup — don't leave the app installed or the emulator/Appium
+server running once a flow/test execution has finished and reported. Close
+the Appium session first (`appium_action.sh close-session`), then run this
+script.
+
 Do **not** run this right after `launch_environment.sh` — `driveFlow` still
 needs the Appium server and emulator alive in between. This is a separate,
-explicit last step, not something `launch_environment.sh` does on its own.
+explicit last step, not something `launch_environment.sh` does on its own —
+it only becomes the right call once the flow doc has actually finished
+driving.
 
-It stops whatever emulator (`adb emu kill`) and Appium server process (found
-via the port in `appiumServerUrl`) are currently running, and is a safe no-op
-if either is already stopped.
+It uninstalls the package recorded in `.last_install_state` (the build
+`launch_environment.sh` most recently installed), then stops whatever
+emulator (`adb emu kill`) and Appium server process (found via the port in
+`appiumServerUrl`) are currently running — each step is a safe no-op if
+there's nothing to uninstall/stop.
 
 Both `launch_environment.sh` and `close_environment.sh` are allowlisted by
 their fixed script paths in the shared, committed `.claude/settings.json`, so

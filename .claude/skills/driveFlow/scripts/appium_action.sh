@@ -21,17 +21,33 @@
 #   appium_action.sh type <text>       # via adb
 #   appium_action.sh back              # Android hardware back button
 #   appium_action.sh hide-keyboard     # dismiss the soft keyboard, if shown
-#   appium_action.sh swipe <x1> <y1> <x2> <y2> [durationMs]  # raw custom swipe, default 300ms
+#   appium_action.sh swipe <x1> <y1> <x2> <y2> [durationMs]  # raw custom swipe, default 450ms
 #   appium_action.sh scroll <up|down|left|right>             # full-screen directional swipe
-#   appium_action.sh scroll-to <substring> [maxScrolls]      # scroll down + check, repeatedly, until found (default 10)
+#   appium_action.sh scroll-to <substring> [up|down|left|right] [maxScrolls]  # scroll (default down) + check,
+#                                                             # repeatedly, until found (default 10), logging every
+#                                                             # attempt and stopping the instant the substring appears
 #   appium_action.sh source            # prints page source XML to stdout
 #   appium_action.sh contains <substring>   # exit 0 if substring is in the current source, else 1
+#   appium_action.sh assert-all <substring1> [substring2] ...  # like contains, but checks every substring
+#                                            # against ONE page-source fetch — use for a whole step's assertion
+#                                            # list at once instead of one contains call per substring
 #   appium_action.sh find <substring>       # prints each matching element's bounds="[x1,y1][x2,y2]" — use this
 #                                            # instead of piping `source` through a raw grep call
 #   appium_action.sh wait-for <substring> [timeoutSeconds]        # poll until substring appears (default 30s)
 #   appium_action.sh wait-until-gone <substring> [timeoutSeconds] # poll until substring disappears (default 30s) — for loading states
 #   appium_action.sh screenshot [name]      # saves a PNG under ../screenshots/, prints the saved path
 #   appium_action.sh close-session
+#
+# All swipe/scroll/scroll-to gestures are driven via `adb shell input swipe`
+# rather than Appium's W3C pointer actions. A raw 2-point W3C pointerMove (as
+# this script used before) gives UiAutomator2 only a start and end coordinate
+# to interpolate, which Android/Compose scrollables frequently misread as an
+# uncontrolled fling — the actual scroll distance varies run to run, so a
+# fixed-count retry loop can silently skip past the target element. `adb
+# shell input swipe` synthesizes a real interpolated motion-event sequence
+# over the given duration, which Compose's scroll/fling gesture detector
+# recognizes consistently. Since `type`/`back`/`screenshot` already go
+# through adb in this script, this keeps one gesture mechanism instead of two.
 
 set -uo pipefail
 
@@ -72,22 +88,15 @@ get_window_size() {
 }
 
 do_swipe() {
-  local session_id="$1" x1="$2" y1="$3" x2="$4" y2="$5" duration="${6:-300}"
-  curl -s -X POST "$APPIUM_URL/session/$session_id/actions" -H "Content-Type: application/json" -d "{
-    \"actions\": [
-      {\"type\":\"pointer\",\"id\":\"finger1\",\"parameters\":{\"pointerType\":\"touch\"},
-       \"actions\":[
-         {\"type\":\"pointerMove\",\"duration\":0,\"x\":$x1,\"y\":$y1},
-         {\"type\":\"pointerDown\",\"button\":0},
-         {\"type\":\"pointerMove\",\"duration\":$duration,\"x\":$x2,\"y\":$y2},
-         {\"type\":\"pointerUp\",\"button\":0}
-       ]}
-    ]
-  }" > /dev/null
+  local x1="$2" y1="$3" x2="$4" y2="$5" duration="${6:-450}"
+  local device_serial
+  device_serial="$(running_emulator)"
+  [[ -n "$device_serial" ]] || fail "No running emulator detected (adb devices)."
+  adb -s "$device_serial" shell input swipe "$x1" "$y1" "$x2" "$y2" "$duration"
 }
 
 CMD="${1:-}"
-[[ -n "$CMD" ]] || fail "Usage: appium_action.sh <open-session|tap|long-press|double-tap|type|back|hide-keyboard|swipe|scroll|scroll-to|source|contains|find|wait-for|wait-until-gone|screenshot|close-session> [args]"
+[[ -n "$CMD" ]] || fail "Usage: appium_action.sh <open-session|tap|long-press|double-tap|type|back|hide-keyboard|wake-screen|swipe|scroll|scroll-to|source|contains|assert-all|find|wait-for|wait-until-gone|screenshot|close-session> [args]"
 shift || true
 
 case "$CMD" in
@@ -107,7 +116,7 @@ case "$CMD" in
           \"appium:appActivity\": \"$APP_ACTIVITY\",
           \"appium:noReset\": true,
           \"appium:autoGrantPermissions\": true,
-          \"appium:newCommandTimeout\": 300
+          \"appium:newCommandTimeout\": 3600
         }
       }
     }")
@@ -187,13 +196,23 @@ case "$CMD" in
     adb -s "$DEVICE_SERIAL" shell input keyevent 4
     ;;
 
+  wake-screen)
+    DEVICE_SERIAL="$(running_emulator)"
+    [[ -n "$DEVICE_SERIAL" ]] || fail "No running emulator detected (adb devices)."
+    AWAKE=$(adb -s "$DEVICE_SERIAL" shell dumpsys power | grep -o 'mWakefulness=[A-Za-z]*' | head -1)
+    if [[ "$AWAKE" != "mWakefulness=Awake" ]]; then
+      adb -s "$DEVICE_SERIAL" shell input keyevent 224  # KEYCODE_WAKEUP
+      adb -s "$DEVICE_SERIAL" shell input keyevent 82   # KEYCODE_MENU, dismisses a simple (non-PIN) lock screen
+    fi
+    ;;
+
   hide-keyboard)
     SESSION_ID="$(resolve_session_id)"
     curl -s -X POST "$APPIUM_URL/session/$SESSION_ID/appium/device/hide_keyboard" -H "Content-Type: application/json" -d '{}' > /dev/null
     ;;
 
   swipe)
-    X1="${1:-}"; Y1="${2:-}"; X2="${3:-}"; Y2="${4:-}"; DURATION="${5:-300}"
+    X1="${1:-}"; Y1="${2:-}"; X2="${3:-}"; Y2="${4:-}"; DURATION="${5:-450}"
     [[ -n "$X1" && -n "$Y1" && -n "$X2" && -n "$Y2" ]] || fail "Usage: appium_action.sh swipe <x1> <y1> <x2> <y2> [durationMs]"
     SESSION_ID="$(resolve_session_id)"
     do_swipe "$SESSION_ID" "$X1" "$Y1" "$X2" "$Y2" "$DURATION"
@@ -206,35 +225,67 @@ case "$CMD" in
     [[ -n "${WIDTH:-}" && -n "${HEIGHT:-}" ]] || fail "Could not determine window size."
     CENTER_X=$((WIDTH / 2)); CENTER_Y=$((HEIGHT / 2))
     case "$DIRECTION" in
-      down)  do_swipe "$SESSION_ID" "$CENTER_X" $((HEIGHT * 80 / 100)) "$CENTER_X" $((HEIGHT * 20 / 100)) ;;
-      up)    do_swipe "$SESSION_ID" "$CENTER_X" $((HEIGHT * 20 / 100)) "$CENTER_X" $((HEIGHT * 80 / 100)) ;;
-      left)  do_swipe "$SESSION_ID" $((WIDTH * 80 / 100)) "$CENTER_Y" $((WIDTH * 20 / 100)) "$CENTER_Y" ;;
-      right) do_swipe "$SESSION_ID" $((WIDTH * 20 / 100)) "$CENTER_Y" $((WIDTH * 80 / 100)) "$CENTER_Y" ;;
+      down)  do_swipe "$SESSION_ID" "$CENTER_X" $((HEIGHT * 82 / 100)) "$CENTER_X" $((HEIGHT * 22 / 100)) ;;
+      up)    do_swipe "$SESSION_ID" "$CENTER_X" $((HEIGHT * 22 / 100)) "$CENTER_X" $((HEIGHT * 82 / 100)) ;;
+      left)  do_swipe "$SESSION_ID" $((WIDTH * 82 / 100)) "$CENTER_Y" $((WIDTH * 18 / 100)) "$CENTER_Y" ;;
+      right) do_swipe "$SESSION_ID" $((WIDTH * 18 / 100)) "$CENTER_Y" $((WIDTH * 82 / 100)) "$CENTER_Y" ;;
       *) fail "Usage: appium_action.sh scroll <up|down|left|right>" ;;
     esac
     ;;
 
   scroll-to)
-    SUBSTR="${1:-}"; MAX_SCROLLS="${2:-10}"
-    [[ -n "$SUBSTR" ]] || fail "Usage: appium_action.sh scroll-to <substring> [maxScrolls]"
+    # scroll-to <substring> [up|down|left|right] [maxScrolls]
+    # Direction is optional (defaults to down) and detected positionally so
+    # existing 2-arg callers (`scroll-to "text" 15`) keep working unchanged.
+    SUBSTR="${1:-}"
+    [[ -n "$SUBSTR" ]] || fail "Usage: appium_action.sh scroll-to <substring> [up|down|left|right] [maxScrolls]"
+    if [[ "${2:-}" =~ ^(up|down|left|right)$ ]]; then
+      DIRECTION="$2"; MAX_SCROLLS="${3:-10}"
+    else
+      DIRECTION="down"; MAX_SCROLLS="${2:-10}"
+    fi
     SESSION_ID="$(resolve_session_id)"
     read -r WIDTH HEIGHT <<< "$(get_window_size "$SESSION_ID")"
     [[ -n "${WIDTH:-}" && -n "${HEIGHT:-}" ]] || fail "Could not determine window size."
-    CENTER_X=$((WIDTH / 2))
-    for ((i = 0; i < MAX_SCROLLS; i++)); do
-      PAGE="$(get_page_source "$SESSION_ID")"
-      if echo "$PAGE" | grep -qF "$SUBSTR"; then
-        echo "FOUND: $SUBSTR (after $i scroll(s))"
-        exit 0
-      fi
-      do_swipe "$SESSION_ID" "$CENTER_X" $((HEIGHT * 80 / 100)) "$CENTER_X" $((HEIGHT * 20 / 100))
-      sleep 1
-    done
+    CENTER_X=$((WIDTH / 2)); CENTER_Y=$((HEIGHT / 2))
+
+    swipe_once() {
+      case "$DIRECTION" in
+        down)  do_swipe "$SESSION_ID" "$CENTER_X" $((HEIGHT * 82 / 100)) "$CENTER_X" $((HEIGHT * 22 / 100)) ;;
+        up)    do_swipe "$SESSION_ID" "$CENTER_X" $((HEIGHT * 22 / 100)) "$CENTER_X" $((HEIGHT * 82 / 100)) ;;
+        left)  do_swipe "$SESSION_ID" $((WIDTH * 82 / 100)) "$CENTER_Y" $((WIDTH * 18 / 100)) "$CENTER_Y" ;;
+        right) do_swipe "$SESSION_ID" $((WIDTH * 18 / 100)) "$CENTER_Y" $((WIDTH * 82 / 100)) "$CENTER_Y" ;;
+      esac
+    }
+
     PAGE="$(get_page_source "$SESSION_ID")"
     if echo "$PAGE" | grep -qF "$SUBSTR"; then
-      echo "FOUND: $SUBSTR (after $MAX_SCROLLS scroll(s))"
+      echo "FOUND: $SUBSTR (already visible, no scroll needed)"
       exit 0
     fi
+
+    STUCK_COUNT=0
+    for ((i = 1; i <= MAX_SCROLLS; i++)); do
+      swipe_once
+      sleep 1
+      NEW_PAGE="$(get_page_source "$SESSION_ID")"
+      if echo "$NEW_PAGE" | grep -qF "$SUBSTR"; then
+        echo "FOUND: $SUBSTR (after $i scroll(s) $DIRECTION)"
+        exit 0
+      fi
+      if [[ "$NEW_PAGE" == "$PAGE" ]]; then
+        STUCK_COUNT=$((STUCK_COUNT + 1))
+        echo "scroll-to: attempt $i/$MAX_SCROLLS ($DIRECTION) — screen unchanged after swipe (stuck $STUCK_COUNT/2), '$SUBSTR' not yet visible" >&2
+        if (( STUCK_COUNT >= 2 )); then
+          echo "NOT FOUND: $SUBSTR (list stopped responding to scroll after $i attempt(s) — likely reached the end)"
+          exit 1
+        fi
+      else
+        STUCK_COUNT=0
+        echo "scroll-to: attempt $i/$MAX_SCROLLS ($DIRECTION) — list moved, '$SUBSTR' not yet visible" >&2
+      fi
+      PAGE="$NEW_PAGE"
+    done
     echo "NOT FOUND: $SUBSTR (gave up after $MAX_SCROLLS scrolls)"
     exit 1
     ;;
@@ -256,6 +307,27 @@ case "$CMD" in
       echo "NOT FOUND: $SUBSTR"
       exit 1
     fi
+    ;;
+
+  assert-all)
+    # Checks every given substring against ONE page-source fetch instead of
+    # one fetch per substring — use this for a step's whole assertion list
+    # once the screen has settled (wait-for/wait-until-gone first if the
+    # screen has a loading state). Still reports each substring individually;
+    # only the number of page-source round trips changes, not the coverage.
+    [[ $# -ge 1 ]] || fail "Usage: appium_action.sh assert-all <substring1> [substring2] ..."
+    SESSION_ID="$(resolve_session_id)"
+    PAGE="$(get_page_source "$SESSION_ID")"
+    FAIL_COUNT=0
+    for SUBSTR in "$@"; do
+      if echo "$PAGE" | grep -qF "$SUBSTR"; then
+        echo "FOUND: $SUBSTR"
+      else
+        echo "NOT FOUND: $SUBSTR"
+        FAIL_COUNT=$((FAIL_COUNT + 1))
+      fi
+    done
+    [[ $FAIL_COUNT -eq 0 ]] || exit 1
     ;;
 
   find)

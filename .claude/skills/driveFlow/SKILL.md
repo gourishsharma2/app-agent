@@ -70,11 +70,13 @@ call is what keeps this prompt-free.
 .claude/skills/driveFlow/scripts/appium_action.sh type "some text"
 .claude/skills/driveFlow/scripts/appium_action.sh back                 # Android hardware back button
 .claude/skills/driveFlow/scripts/appium_action.sh hide-keyboard        # dismiss the soft keyboard, if shown
+.claude/skills/driveFlow/scripts/appium_action.sh wake-screen          # wakes the device if its screen went to sleep (no-op if already awake)
 .claude/skills/driveFlow/scripts/appium_action.sh swipe <x1> <y1> <x2> <y2> [durationMs]  # raw custom swipe
 .claude/skills/driveFlow/scripts/appium_action.sh scroll <up|down|left|right>             # full-screen directional swipe
-.claude/skills/driveFlow/scripts/appium_action.sh scroll-to "some text" [maxScrolls]      # scroll down + check repeatedly until found (default 10 scrolls)
+.claude/skills/driveFlow/scripts/appium_action.sh scroll-to "some text" [up|down|left|right] [maxScrolls]  # scroll (default down) + check repeatedly until found (default 10 scrolls), logging each attempt
 .claude/skills/driveFlow/scripts/appium_action.sh source              # prints the current UI hierarchy XML
 .claude/skills/driveFlow/scripts/appium_action.sh contains "some text" # exit 0/1, for a quick screen check
+.claude/skills/driveFlow/scripts/appium_action.sh assert-all "text1" "text2" ...  # checks all substrings against one page-source fetch — use for a step's whole assertion list
 .claude/skills/driveFlow/scripts/appium_action.sh find "some text"     # prints bounds="[x1,y1][x2,y2]" for each matching element
 .claude/skills/driveFlow/scripts/appium_action.sh wait-for "some text" [timeoutSeconds]        # poll until it appears (default 30s)
 .claude/skills/driveFlow/scripts/appium_action.sh wait-until-gone "some text" [timeoutSeconds]  # poll until it disappears (default 30s) — for loading states
@@ -93,6 +95,17 @@ reopening a session resumes wherever the app was left (e.g. mid-flow on some
 screen), it does not restart at the welcome screen. Only `launchApplication`'s
 uninstall+reinstall actually resets app state.
 
+`open-session` sets a 1-hour `newCommandTimeout` (up from Appium's default),
+so the session survives normal thinking/back-and-forth gaps between actions
+without dying mid-flow — if `source`/`contains`/etc. ever comes back with
+"invalid session id", the session genuinely expired (or the app crashed/got
+killed) and needs `open-session` called again, not a sign anything else is
+wrong. Separately, `launch_environment.sh` disables the emulator's screen
+sleep timeout for the whole automation session, so the display shouldn't go
+dark (and `screenshot` shouldn't return a black frame) during normal gaps
+either — if the screen does still appear off, prefer `wake-screen` over
+diagnosing it as an app problem.
+
 ## Finding tap coordinates
 
 Read the flow doc's screenshot (under `screenshots or figma Links/screens/`) to see roughly where an
@@ -108,12 +121,29 @@ confirm the screen actually changed.
 
 For a doc instruction like "scroll down until X is visible," don't hand-roll a
 tap-then-`contains`-then-tap-again loop — use `scroll-to "X" [maxScrolls]` in
-one call; it scrolls and re-checks internally and reports how many scrolls it
-took (or that it gave up after the max). For a single scroll without a target
-to search for, use `scroll <up|down|left|right>`, which swipes across the
-full screen height/width automatically (no need to compute coordinates
+one call; it scrolls and re-checks internally, logs every attempt (to
+stderr — `FOUND:`/`NOT FOUND:` on stdout stay parseable), and stops the
+instant the substring appears instead of doing extra scrolls. It also detects
+a stalled list: if two consecutive scrolls produce no change in the page
+source, it stops early and reports "likely reached the end" rather than
+burning through the rest of `maxScrolls` blindly. Pass a direction
+(`scroll-to "X" up 15`) for the rare screen that needs to scroll up/left/right
+instead of down — omit it and it defaults to down. For a single scroll without
+a target to search for, use `scroll <up|down|left|right>`, which swipes across
+the full screen height/width automatically (no need to compute coordinates
 yourself). `swipe <x1> <y1> <x2> <y2>` is there for anything more specific
 (e.g. a custom carousel) that the directional `scroll` doesn't fit.
+
+Under the hood, every one of these gestures is driven by `adb shell input
+swipe`, not Appium's W3C pointer-actions API. A raw 2-point W3C swipe (start
+coordinate, end coordinate, duration) gives UiAutomator2 too little to go on,
+and Android/Compose scrollables often read it as an uncontrolled fling —
+the actual scroll distance varies between otherwise-identical calls, which is
+why a fixed-count scroll loop could skip past the target element on one run
+and undershoot it on the next. `adb shell input swipe` synthesizes a real
+interpolated motion-event sequence, which Compose's scroll gesture detector
+recognizes consistently across devices and screen sizes (coordinates are
+still computed from `window/rect`, so nothing is hardcoded to one resolution).
 `long-press`, `double-tap`, and `back` (the hardware back button) cover the
 other common gestures a flow doc might call for; `hide-keyboard` is useful
 right after `type` if an on-screen keyboard is covering a button you need to
@@ -134,12 +164,22 @@ silently retrying forever or improvising a longer wait outside the script.
 ## Checking assertions
 
 If a step in the flow doc has an **Assertions** list, don't just eyeball the
-`source` dump — run `contains "<exact substring>"` for each listed string
-right after landing on that screen, and report each one as pass/fail. An
-"OR" between two assertions (e.g. `"Payments"` OR `"Due Amount"`) passes if
-either `contains` call succeeds. For a "not present before, present after
-tapping X" assertion, capture `source` (or a targeted `contains`) before and
-after the tap and confirm the diff.
+`source` dump — check each listed string right after landing on that screen,
+and report each one as pass/fail. Prefer `assert-all "<substring1>" "<substring2>" ...`
+over calling `contains` once per substring: it fetches the page source once
+and checks every substring against that single snapshot instead of
+re-fetching per assertion, and still reports each one individually (FOUND/NOT
+FOUND), so nothing about the pass/fail coverage changes — only the number of
+page-source round trips does. Make sure the screen has actually settled
+first (see "Waiting for loading states" below) before batching — checking a
+whole assertion list against a still-loading screen just means several
+assertions come back NOT FOUND together instead of one being a timing
+fluke. Fall back to a single `contains "<substring>"` call when you only
+need one check (e.g. confirming a tap landed on the right screen before
+deciding what to do next). An "OR" between two assertions (e.g. `"Payments"`
+OR `"Due Amount"`) passes if either one is FOUND. For a "not present before,
+present after tapping X" assertion, capture `source` (or a targeted
+`contains`) before and after the tap and confirm the diff.
 
 If a step has no Assertions list, fall back to the prior behavior: read
 `source` and judge by eye whether the screen matches the doc's description.
@@ -151,11 +191,12 @@ results across runs. It's for verifying a documented flow still works on a
 given build. Turning a flow into a real regression test (Page Object + TestNG)
 is a separate, explicit step.
 
-Once the whole task is done (flow driven and verified), close the webdriver
-session with `close-session` as above, then optionally tear down the whole
-environment (Appium server + emulator) with
-`.claude/skills/launchApplication/scripts/close_environment.sh` — see that
-skill's "Tearing the environment down" section.
+Once the whole task is done (flow driven, verified, and reported), close the
+webdriver session with `close-session` as above, then always tear down the
+whole environment (uninstall the app, stop Appium, stop the emulator) with
+`.claude/skills/launchApplication/scripts/close_environment.sh` — this is a
+standard step after every completed run, not optional, per that skill's
+"Tearing the environment down" section.
 
 ## Reporting results
 

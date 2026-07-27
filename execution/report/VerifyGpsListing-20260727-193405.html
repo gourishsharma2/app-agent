@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Login Flow — Run Report</title>
+<title>VerifyGpsListing — Run Report</title>
 <style>
   :root {
     --bg: #f4f6fb;
@@ -124,8 +124,8 @@
     <header class="hero">
       <div class="hero-text">
         <div class="eyebrow">Run Report</div>
-        <h1>Login Flow</h1>
-        <div class="meta-line">Executed on: 24 Jul 2026, 04:28 PM &nbsp;·&nbsp; Duration: 2m 3s</div>
+        <h1>VerifyGpsListing</h1>
+        <div class="meta-line">Executed on: 27 Jul 2026, 01:45 PM &nbsp;·&nbsp; Duration: 18m 13s</div>
       </div>
       <div class="badge badge-lg badge-fail">
         ❌ FAIL
@@ -138,15 +138,15 @@
         <div class="summary-grid">
         <div class="summary-item">
           <div class="summary-label">Flow document</div>
-          <div class="summary-value">flow/loginFlow.md</div>
+          <div class="summary-value">tests/VerifyGpsListing.md</div>
         </div>
         <div class="summary-item">
           <div class="summary-label">Precondition</div>
-          <div class="summary-value">None</div>
+          <div class="summary-value">flow/loginFlow.md Steps 1-5</div>
         </div>
         <div class="summary-item">
           <div class="summary-label">APK</div>
-          <div class="summary-value">app-release (10).apk</div>
+          <div class="summary-value">app-release-10.apk</div>
         </div>
         <div class="summary-item">
           <div class="summary-label">Version Code</div>
@@ -170,35 +170,35 @@
         </div>
         <div class="summary-item">
           <div class="summary-label">Run Start</div>
-          <div class="summary-value">2026-07-24 16:28:17 UTC</div>
+          <div class="summary-value">2026-07-27T13:45:48Z</div>
         </div>
         <div class="summary-item">
           <div class="summary-label">Run End</div>
-          <div class="summary-value">2026-07-24 16:30:20 UTC</div>
+          <div class="summary-value">2026-07-27T14:04:01Z</div>
         </div>
         <div class="summary-item">
           <div class="summary-label">Duration</div>
-          <div class="summary-value">2m 3s</div>
+          <div class="summary-value">18m 13s</div>
         </div>
         <div class="summary-item">
           <div class="summary-label">Total Tokens</div>
-          <div class="summary-value">N/A</div>
+          <div class="summary-value">639415</div>
         </div>
         <div class="summary-item">
           <div class="summary-label">Input Tokens</div>
-          <div class="summary-value">N/A</div>
+          <div class="summary-value">22</div>
         </div>
         <div class="summary-item">
           <div class="summary-label">Output Tokens</div>
-          <div class="summary-value">N/A</div>
+          <div class="summary-value">4824</div>
         </div>
         <div class="summary-item">
           <div class="summary-label">Cache Read</div>
-          <div class="summary-value">N/A</div>
+          <div class="summary-value">621918</div>
         </div>
         <div class="summary-item">
           <div class="summary-label">Cache Write</div>
-          <div class="summary-value">N/A</div>
+          <div class="summary-value">12651</div>
         </div>
         </div>
       </div>
@@ -213,100 +213,40 @@
           </thead>
           <tbody>
         <tr class="row-pass">
-          <td>1: App launch / login screen</td>
-          <td class="mono">contains &quot;Login to your account&quot;</td>
+          <td>1</td>
+          <td class="mono">N/A</td>
           <td><span class="badge badge-pass">✅ Pass</span></td>
           <td></td>
         </tr>
         <tr class="row-pass">
-          <td>1: App launch / login screen</td>
-          <td class="mono">contains &quot;Phone number&quot;</td>
+          <td>2</td>
+          <td class="mono">N/A</td>
           <td><span class="badge badge-pass">✅ Pass</span></td>
           <td></td>
         </tr>
         <tr class="row-pass">
-          <td>1: App launch / login screen</td>
-          <td class="mono">contains &quot;Send OTP&quot;</td>
-          <td><span class="badge badge-pass">✅ Pass</span></td>
-          <td></td>
-        </tr>
-        <tr class="row-pass">
-          <td>1: App launch / login screen</td>
-          <td class="mono">contains &quot;Continue with password&quot;</td>
-          <td><span class="badge badge-pass">✅ Pass</span></td>
-          <td></td>
-        </tr>
-        <tr class="row-pass">
-          <td>2: Enter mobile number</td>
-          <td class="mono">Phone number field contains typed digits (9355098542)</td>
-          <td><span class="badge badge-pass">✅ Pass</span></td>
-          <td></td>
-        </tr>
-        <tr class="row-pass">
-          <td>2: Enter mobile number</td>
-          <td class="mono">contains &quot;Send OTP&quot;</td>
-          <td><span class="badge badge-pass">✅ Pass</span></td>
-          <td></td>
-        </tr>
-        <tr class="row-pass">
-          <td>2: Enter mobile number</td>
-          <td class="mono">contains &quot;Continue with password&quot;</td>
-          <td><span class="badge badge-pass">✅ Pass</span></td>
-          <td></td>
-        </tr>
-        <tr class="row-pass">
-          <td>3: Enter password</td>
-          <td class="mono">contains &quot;Phone number&quot;</td>
-          <td><span class="badge badge-pass">✅ Pass</span></td>
-          <td></td>
-        </tr>
-        <tr class="row-pass">
-          <td>3: Enter password</td>
-          <td class="mono">contains &quot;Password&quot;</td>
-          <td><span class="badge badge-pass">✅ Pass</span></td>
-          <td></td>
-        </tr>
-        <tr class="row-pass">
-          <td>3: Enter password</td>
-          <td class="mono">contains &quot;Login&quot; (submit button)</td>
-          <td><span class="badge badge-pass">✅ Pass</span></td>
-          <td></td>
-        </tr>
-        <tr class="row-pass">
-          <td>3: Enter password</td>
-          <td class="mono">contains &quot;Create new password&quot;</td>
+          <td>3</td>
+          <td class="mono">N/A</td>
           <td><span class="badge badge-pass">✅ Pass</span></td>
           <td></td>
         </tr>
         <tr class="row-fail">
-          <td>4: Post-login prompts</td>
-          <td class="mono">contains &quot;Allow WheelsEye to send you notifications?&quot;</td>
+          <td>4</td>
+          <td class="mono">N/A</td>
           <td><span class="badge badge-fail">❌ Fail</span></td>
-          <td>System notification permission dialog did not appear; auto-granted at install time (autoGrantPermissions=true) — environment interaction, not app defect (see application/known-behaviors.md)</td>
+          <td>contains &quot;Save location&quot; — NOT FOUND</td>
         </tr>
         <tr class="row-pass">
-          <td>4: Post-login prompts</td>
-          <td class="mono">contains &quot;Unauthenticated App Detected&quot;</td>
+          <td>5</td>
+          <td class="mono">N/A</td>
           <td><span class="badge badge-pass">✅ Pass</span></td>
           <td></td>
         </tr>
-        <tr class="row-pass">
-          <td>5: Home page</td>
-          <td class="mono">contains &quot;FasTag&quot;</td>
-          <td><span class="badge badge-pass">✅ Pass</span></td>
-          <td></td>
-        </tr>
-        <tr class="row-pass">
-          <td>5: Home page</td>
-          <td class="mono">contains &quot;Wallet Balance&quot;</td>
-          <td><span class="badge badge-pass">✅ Pass</span></td>
-          <td></td>
-        </tr>
-        <tr class="row-pass">
-          <td>5: Home page</td>
-          <td class="mono">contains &quot;Home&quot; (bottom nav)</td>
-          <td><span class="badge badge-pass">✅ Pass</span></td>
-          <td></td>
+        <tr class="row-fail">
+          <td>6</td>
+          <td class="mono">N/A</td>
+          <td><span class="badge badge-fail">❌ Fail</span></td>
+          <td>contains &quot;Check balance&quot; — NOT FOUND on HR36AP7846 card</td>
         </tr>
           </tbody>
         </table>
@@ -316,11 +256,11 @@
     <section class="card stats-card">
       <h2>Statistics</h2>
       <div class="stats-grid">
-        <div class="stat"><div class="stat-value">16</div><div class="stat-label">Total Steps</div></div>
-        <div class="stat stat-pass"><div class="stat-value">15</div><div class="stat-label">Passed</div></div>
-        <div class="stat stat-fail"><div class="stat-value">1</div><div class="stat-label">Failed</div></div>
+        <div class="stat"><div class="stat-value">6</div><div class="stat-label">Total Steps</div></div>
+        <div class="stat stat-pass"><div class="stat-value">4</div><div class="stat-label">Passed</div></div>
+        <div class="stat stat-fail"><div class="stat-value">2</div><div class="stat-label">Failed</div></div>
         <div class="stat stat-skip"><div class="stat-value">0</div><div class="stat-label">Skipped</div></div>
-        <div class="stat"><div class="stat-value">94%</div><div class="stat-label">Success Rate</div></div>
+        <div class="stat"><div class="stat-value">67%</div><div class="stat-label">Success Rate</div></div>
       </div>
     </section>
     
@@ -328,9 +268,15 @@
       <h2>⚠️ Failure Details</h2>
       
       <div class="failure-item">
-        <div class="failure-row"><span class="failure-label">Failed Step:</span> 4: Post-login prompts</div>
-        <div class="failure-row"><span class="failure-label">Assertion:</span> <span class="mono">contains &quot;Allow WheelsEye to send you notifications?&quot;</span></div>
-        <div class="failure-row"><span class="failure-label">Failure Reason:</span> System notification permission dialog did not appear; auto-granted at install time (autoGrantPermissions=true) — environment interaction, not app defect (see application/known-behaviors.md)</div>
+        <div class="failure-row"><span class="failure-label">Failed Step:</span> N/A</div>
+        <div class="failure-row"><span class="failure-label">Assertion:</span> <span class="mono">N/A</span></div>
+        <div class="failure-row"><span class="failure-label">Failure Reason:</span> contains &quot;Save location&quot; — NOT FOUND</div>
+        <div class="failure-row"><span class="failure-label">Timestamp:</span> N/A</div>
+      </div>
+      <div class="failure-item">
+        <div class="failure-row"><span class="failure-label">Failed Step:</span> N/A</div>
+        <div class="failure-row"><span class="failure-label">Assertion:</span> <span class="mono">N/A</span></div>
+        <div class="failure-row"><span class="failure-label">Failure Reason:</span> contains &quot;Check balance&quot; — NOT FOUND on HR36AP7846 card</div>
         <div class="failure-row"><span class="failure-label">Timestamp:</span> N/A</div>
       </div>
     </section>

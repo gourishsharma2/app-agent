@@ -62,7 +62,6 @@
       "notes": ""
     },
     {
-      "id": 4,
       "title": "Post-login prompts",
       "action": [
         {
@@ -82,9 +81,10 @@
         "Allow WheelsEye to send you notifications?",
         "Unauthenticated App Detected"
       ],
-      "knownNonBug": true,
+      "knownNonBug": false,
       "retries": 1,
-      "notes": "This harness opens every session with autoGrantPermissions=true, so the notification-permission system dialog never actually appears; the noReset-persisted install had already dismissed the sideload 'Unauthenticated App Detected' dialog in an earlier session, so it doesn't reappear either. Removed the blocking wait-for (it hard-timed-out after 30s since the dialog never shows) \u2014 assertions are still checked but non-blocking via knownNonBug."
+      "notes": "Assertions are checked strictly (knownNonBug left false by default, per project policy \u2014 never set true automatically). In this harness (autoGrantPermissions=true, noReset with a previously-dismissed sideload dialog) these two dialogs have not reappeared on recent runs, so this step may legitimately FAIL until a human reviews and decides whether to mark it knownNonBug:true via plan_tool.sh patch, or update the source doc.",
+      "id": 4
     },
     {
       "id": 5,

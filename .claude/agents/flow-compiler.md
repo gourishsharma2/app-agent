@@ -45,10 +45,15 @@ expects. Do not deviate from it or invent extra top-level fields.
      re-encoding of what's already in the markdown, not new test authoring
      — never add an assertion the doc doesn't already list, never invent
      text you didn't see in the screenshot.
-   - `knownNonBug: true` for a step whose assertions describe a documented
-     quirk rather than a bug — cross-check `application/known-behaviors.md`
-     (the sideloaded-build "Unauthenticated App Detected" dialog, masked
-     balances, etc.).
+   - `knownNonBug` — **always write `false`, for every step, with no
+     exceptions.** This field exists so a human can later mark a specific
+     step's assertions as a documented non-blocking quirk, but that is
+     exclusively a manual decision made by explicit human instruction (e.g.
+     "mark step 4 of loginFlow as known non-bug"), applied via
+     `plan_tool.sh patch` — never something you infer or set to `true`
+     yourself during compilation, even when a step's assertions clearly
+     match something described in `application/known-behaviors.md`. A miss
+     against a `false` (the default) step is a genuine, reportable failure.
    - `retries` — default `1` unless the doc explicitly describes a loading
      state for that step (e.g. "Taking time in getting your vehicle
      details"), in which case prefer a `wait-until-gone`/`wait-for` action

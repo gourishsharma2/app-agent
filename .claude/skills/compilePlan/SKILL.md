@@ -132,7 +132,7 @@ forcing a clean recompile against the new shape.
       "action": { "type": "tap", "selector": "Login" },
       "waitFor": { "text": "Allow WheelsEye to send you notifications?", "timeoutSeconds": 30 },
       "assertions": ["Allow WheelsEye to send you notifications?", "Unauthenticated App Detected"],
-      "knownNonBug": true
+      "knownNonBug": false
     },
     {
       "id": 5,
@@ -160,11 +160,20 @@ Field notes:
   actually landed on the expected next screen — this is the state-machine
   transition check; `run-plan` waits briefly for it before checking
   `assertions`.
-- **`knownNonBug: true`** marks a step whose assertions are expected/known
-  quirks (per `application/known-behaviors.md` — e.g. the sideloaded-build
-  "Unauthenticated App Detected" dialog) — `run-plan` still checks and
-  reports these, just never treats a mismatch here as a flow-stopping
-  divergence.
+- **`knownNonBug`** — defaults `false` on every step, meaning a missing
+  assertion is always a real, flow-stopping divergence. Setting it `true`
+  makes `run-plan` still check and report that step's assertions but never
+  treat a mismatch as a divergence (reported `WARN` instead of `FAIL`/
+  stopping the run). **This is exclusively a manual field.** Neither
+  `flow-compiler` (at compile time) nor `flow-runner` (during local
+  recovery) is permitted to set it to `true` on its own, ever, no matter how
+  confident either is that a mismatch is a documented quirk rather than a
+  bug — it only ever changes because a human explicitly asks for that one
+  step to be marked (e.g. "mark step 4 of loginFlow as known non-bug"),
+  applied via `plan_tool.sh patch`. The point of this asymmetry: a real
+  regression must never be silently swallowed by the automation deciding
+  for itself that it's fine — only a person looking at the actual doc/app
+  gets to decide that.
 - For a scrollable search (e.g. finding one vehicle card in a 94-item list),
   `action.type: "scroll-to"` additionally carries `direction`, `maxScrolls`,
   and `startHint` (how many scrolls the *previous* successful run needed

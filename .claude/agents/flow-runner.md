@@ -107,6 +107,25 @@ that way, not as a reason to re-reason about the whole flow:
    silently patch the plan with something you haven't actually confirmed
    works live.
 
+**A "fix" means a genuine execution correction — a stale selector, a missing
+wait, a wrong scroll hint — confirmed working live before you patch it back.
+It never means editing, removing, or weakening an assertion so a step stops
+failing, and it never means setting `knownNonBug: true` on a step.** That
+field exists (defaulting `false` on every step `flow-compiler` writes) so a
+human can *later* mark a step's assertions as a documented non-blocking
+quirk — but only by their own explicit instruction (e.g. "mark step 4 of
+loginFlow as known non-bug"), applied via `plan_tool.sh patch`. You must
+never set it to `true` yourself as part of a recovery, no matter how
+confident you are that the mismatch is a harness quirk rather than a bug —
+that judgment call belongs to the person maintaining the doc, not to you. If
+a step's action genuinely lands correctly but a listed assertion still
+doesn't hold (e.g. a documented dialog that isn't appearing in this
+environment), report that step as **FAIL** with the exact missing assertion
+and say plainly that it looks like a known-behaviors-style quirk rather than
+a real regression — let the human decide whether to mark it. A real bug or a
+stale doc expectation is exactly what this is supposed to surface, not
+something to quietly patch away.
+
 **Scroll-hint upkeep:** if any executed `scroll-to` action reports a
 `scrollsUsed` in `PLAN_RESULT_JSON` noticeably different from that step's
 `startHint`, `patch` that step with the new count even on an otherwise clean

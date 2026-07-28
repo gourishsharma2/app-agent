@@ -2,6 +2,8 @@
 
 This document describes the vehicle GPS listing flow on the **Vehicles** tab of the Home page (see `flow/homePage.md`) in the WheelsEye ("operator") mobile app — viewing the fleet's live tracking status, filtered by All / Running / Stopped.
 
+> **The counts below are a snapshot, not a contract.** `All (94)` / `Running (1)` / `Stopped (3)` were the values when these screenshots were taken; the backend reported 85 / 2 / 2 as of 29 Jul 2026, and they change as the fleet moves. Treat the chip *labels* as the assertion and verify the *numbers* against `api/vehicleFilterCount.md` via the `apiCheck` skill. Same applies to per-card speed/ignition/address — see `api/vehiclesDynamic.md`.
+
 ## Step 1: Vehicles tab — All filter (loading state)
 
 Tapping the **Vehicles** tab (next to FasTag) opens the vehicle list, with the **All (94)** filter chip selected by default alongside **Running (1)** and **Stopped (3)** chips and a filter icon. Above the list is a toll-price ticker, a "Need VLTD (AIS 140) Device?" promo banner, and a "Diesel payments" entry. The "Your vehicles" section header shows a refresh icon, a "Reports" (New) button, and an "+ Add device" button, followed by an "Add your other vehicle" input with an "Add" button. The vehicle list itself is still loading, showing "Taking time in getting your vehicle details. Please check back later." A floating "Ask Saarthi" chat bubble and map icon sit above a sticky "Schedule installation" bar (with Order ID and a "Schedule now" button).

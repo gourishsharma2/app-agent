@@ -22,3 +22,14 @@
 
 ### generateReport skill (transient run state) ###
 .claude/skills/generateReport/.run_state
+
+### apiCheck skill (transient run state + secrets) ###
+# .auth_state holds a live session token — never commit it.
+.claude/skills/apiCheck/.auth_state
+.claude/skills/apiCheck/.last_response.json
+.claude/skills/apiCheck/.last_ui_source.xml
+.claude/skills/apiCheck/.last_headers.txt
+.claude/skills/apiCheck/.last_body.txt
+.claude/skills/apiCheck/.checks.json
+__pycache__/
+*.pyc

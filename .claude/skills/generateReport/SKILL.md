@@ -91,6 +91,11 @@ so it stays behind the same allowlisted script path:
   "steps": [
     { "step": "1: Home page", "assertion": "contains \"Loading Location\"", "result": "PASS", "notes": "" },
     { "step": "2: ...", "assertion": "...", "result": "FAIL", "notes": "exact failure reason", "timestamp": "2026-07-24 18:41:02 UTC" }
+  ],
+  "apiChecks": [
+    { "name": "Running chip == API data.running", "result": "PASS", "expected": "2",
+      "actual": "Running (2)", "notes": "matched on screen (normalize=number)",
+      "timestamp": "2026-07-24 18:40:11 UTC" }
   ]
 }
 JSON
@@ -112,6 +117,16 @@ Notes on the JSON payload:
   `TOKENS_AVAILABLE=false` (no `node` on PATH, or the transcript file
   couldn't be found) — don't omit it just because you didn't bother to read
   `end`'s output.
+- `apiChecks` — optional; include it whenever the run had API validations
+  (see the `apiCheck` skill). Paste the output of
+  `.claude/skills/apiCheck/scripts/api_action.sh results --json` **verbatim**:
+  it is the list of checks that were actually recorded during the run, with
+  real expected/actual values. Never hand-write or re-summarize these, for
+  the same reason token counts and timestamps are never invented. Omit the
+  field entirely when the run had no API checks — the section then doesn't
+  render, and reports without API validation look exactly as they did before.
+  A failed API check makes the run's overall result `FAIL` and appears in the
+  Failure Details section alongside failed UI steps.
 - `result` per step accepts `PASS`/`FAIL`/`SKIP` (case-insensitive, with or
   without the ✅/❌/⚠️ glyphs) and is normalized to the right badge.
 - `notes` is the failure reason for a `FAIL` row (shown in Notes and in the

@@ -2,11 +2,11 @@
 
 ## App under test
 - Platform: Android (native), built with Jetpack Compose — UI elements are mostly identified by `content-desc` rather than `resource-id`, and Compose frequently merges several elements into one accessibility node (see `.claude/skills/driveFlow/SKILL.md`, "Finding tap coordinates").
-- Package name (debug/sideload build used for exploration so far): `com.wheelseyeoperator.debug`
-- Package name (Play Store / production): `com.wheelseyeoperator`
-- Launchable activity: `com.wheelseyeoperator.debug.MainActivity` (for the debug build; the production activity name would drop the `.debug` segment)
+- Package name (production build, currently used for automation): `com.wheelseyeoperator`
+- Package name (debug/sideload build used for earlier exploration): `com.wheelseyeoperator.debug`
+- Launchable activity: `com.wheelseyeoperator.MainActivity` (confirmed via `adb shell cmd package resolve-activity --brief`; the debug build inserts a `.debug` segment)
 - App label: "WheelsEye"
-- Version explored: versionName `23.7.0`, versionCode `1` (from `aapt dump badging` on the provided APK)
+- Versions seen: versionName `24.1.0` / versionCode `244410` (production build, verified 29 Jul 2026) — earlier docs describe versionName `23.7.0` / versionCode `1` (debug build). The `24.1.0` build's login screen has **no Staging/Production toggle** and no visible "One Tap Login"; both are described in `flow/loginFlow.md` from the older debug build.
 - Min SDK: 24 · Target SDK: 36 · Compile SDK: 36
 - Native ABIs in the APK: `arm64-v8a`, `armeabi-v7a`, `x86_64`
 - Notable permissions: fine/coarse location, Bluetooth scan/connect (GPS hardware pairing), camera, contacts, notifications, record audio, foreground service, boot-completed — consistent with a fleet-tracking + FASTag + diesel-purchase app.

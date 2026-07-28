@@ -6,15 +6,20 @@ This project automates the WheelsEye **Operator** Android app **without writing 
 1. `launchApplication` skill — boots the Android emulator + Appium server and installs a given APK build (`.claude/skills/launchApplication/`).
 2. Flow/screen behavior is documented in `flow/*.md` (per-screen or short flows) and `tests/*.md` (end-to-end business flows), each with real screenshots under `screenshots or figma Links/<name>/` and a per-step **Assertions** list (`contains "..."` checks against the UI hierarchy dump).
 3. `driveFlow` skill — taps/types/reads the screen to drive the documented flow and verify each step's assertions (`.claude/skills/driveFlow/`).
-4. Optional reporting — when asked to store results, `driveFlow` writes a per-step Pass/Fail table to `execution/report/` (see that skill's "Reporting results" section); raw evidence optionally goes to `execution/logs/`.
+4. `apiCheck` skill — calls the backend directly, validates the response, and compares the values it returned against what the app renders, so data-driven assertions come from the API instead of from numbers hardcoded in a doc (`.claude/skills/apiCheck/`, contracts in `api/*.md`).
+5. Reporting — every run writes an HTML report to `execution/report/`, including an **API Validations** section when the run had API checks; raw evidence optionally goes to `execution/logs/`.
 
 ## Coverage so far
 | Doc | Status |
 |---|---|
-| `flow/loginFlow.md` | Documented (password login path) — not yet driven/run |
-| `flow/homePage.md` | Documented (FasTag tab) — not yet driven/run |
+| `flow/loginFlow.md` | Documented (password login path); driven 29 Jul 2026 up to the Login tap — blocked by the backend's 15-minute login rate limit, not by the app |
+| `flow/homePage.md` | Documented (FasTag tab) — not yet driven/run. Note its `contains "View & pay"` assertion could never match before the XML-escaping fix (see `summary/framework-review.md`) |
 | `flow/gpsListingFlow.md` | Documented (Vehicles tab: All/Running/Stopped) — not yet driven/run |
-| `tests/VerifyGpsListing.md` | Documented (login → GPS listing verification, incl. scroll-to-card check) — not yet driven/run |
+| `tests/VerifyGpsListing.md` | Documented (login → GPS listing verification, incl. scroll-to-card check + API validations) — not yet driven/run |
+| `api/login.md` | Documented — endpoint verified live (returns 401 rate-limit when over-used) |
+| `api/servicesInfo.md` | Documented — endpoint verified live (HTTP 200) |
+| `api/vehicleFilterCount.md` | Documented — endpoint verified live (HTTP 200); UI mapping not yet run against the app |
+| `api/vehiclesDynamic.md` | Documented — endpoint verified live (HTTP 200); UI mapping not yet run against the app |
 
 ## Not yet started
 - Diesel tab, LOADS tab, side menu, search, Notification screen, Help screen

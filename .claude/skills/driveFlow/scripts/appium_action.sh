@@ -16,6 +16,8 @@
 # Usage:
 #   appium_action.sh open-session <appPackage> <appActivity>
 #   appium_action.sh tap <x> <y>
+#   appium_action.sh tap-on <substring>   # tap the centre of the element containing <substring>
+#                                          # — prefer this over hardcoded x/y from a screenshot
 #   appium_action.sh long-press <x> <y> [durationMs]        # default 800ms
 #   appium_action.sh double-tap <x> <y>
 #   appium_action.sh type <text>       # via adb
@@ -82,6 +84,39 @@ get_page_source() {
   curl -s "$APPIUM_URL/session/$session_id/source" | python3 -c "import json,sys; print(json.load(sys.stdin)['value'])"
 }
 
+# The page source is XML, so any assertion text containing & < > or " arrives
+# escaped: the Settings screen's "Network & internet" is `Network &amp;
+# internet` in the dump, and this repo's own `contains "View & pay"`
+# assertion in flow/homePage.md could never match. Check the literal needle
+# first, then its XML-escaped form, so docs can keep writing text the way it
+# actually appears on screen.
+xml_escape() {
+  printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g'
+}
+
+page_contains() {
+  local page="$1" needle="$2" escaped
+  echo "$page" | grep -qF "$needle" && return 0
+  escaped="$(xml_escape "$needle")"
+  [[ "$escaped" != "$needle" ]] && echo "$page" | grep -qF "$escaped" && return 0
+  return 1
+}
+
+do_tap() {
+  local session_id="$1" x="$2" y="$3"
+  curl -s -X POST "$APPIUM_URL/session/$session_id/actions" -H "Content-Type: application/json" -d "{
+    \"actions\": [
+      {\"type\":\"pointer\",\"id\":\"finger1\",\"parameters\":{\"pointerType\":\"touch\"},
+       \"actions\":[
+         {\"type\":\"pointerMove\",\"duration\":0,\"x\":$x,\"y\":$y},
+         {\"type\":\"pointerDown\",\"button\":0},
+         {\"type\":\"pause\",\"duration\":100},
+         {\"type\":\"pointerUp\",\"button\":0}
+       ]}
+    ]
+  }" > /dev/null
+}
+
 get_window_size() {
   local session_id="$1"
   curl -s "$APPIUM_URL/session/$session_id/window/rect" | python3 -c "import json,sys; v=json.load(sys.stdin)['value']; print(v['width'], v['height'])"
@@ -96,7 +131,7 @@ do_swipe() {
 }
 
 CMD="${1:-}"
-[[ -n "$CMD" ]] || fail "Usage: appium_action.sh <open-session|tap|long-press|double-tap|type|back|hide-keyboard|wake-screen|swipe|scroll|scroll-to|source|contains|assert-all|find|wait-for|wait-until-gone|screenshot|close-session> [args]"
+[[ -n "$CMD" ]] || fail "Usage: appium_action.sh <open-session|tap|tap-on|long-press|double-tap|type|back|hide-keyboard|wake-screen|swipe|scroll|scroll-to|source|contains|assert-all|find|wait-for|wait-until-gone|screenshot|close-session> [args]"
 shift || true
 
 case "$CMD" in
@@ -130,17 +165,7 @@ case "$CMD" in
     X="${1:-}"; Y="${2:-}"
     [[ -n "$X" && -n "$Y" ]] || fail "Usage: appium_action.sh tap <x> <y>"
     SESSION_ID="$(resolve_session_id)"
-    curl -s -X POST "$APPIUM_URL/session/$SESSION_ID/actions" -H "Content-Type: application/json" -d "{
-      \"actions\": [
-        {\"type\":\"pointer\",\"id\":\"finger1\",\"parameters\":{\"pointerType\":\"touch\"},
-         \"actions\":[
-           {\"type\":\"pointerMove\",\"duration\":0,\"x\":$X,\"y\":$Y},
-           {\"type\":\"pointerDown\",\"button\":0},
-           {\"type\":\"pause\",\"duration\":100},
-           {\"type\":\"pointerUp\",\"button\":0}
-         ]}
-      ]
-    }" > /dev/null
+    do_tap "$SESSION_ID" "$X" "$Y"
     ;;
 
   long-press)
@@ -259,7 +284,7 @@ case "$CMD" in
     }
 
     PAGE="$(get_page_source "$SESSION_ID")"
-    if echo "$PAGE" | grep -qF "$SUBSTR"; then
+    if page_contains "$PAGE" "$SUBSTR"; then
       echo "FOUND: $SUBSTR (already visible, no scroll needed)"
       exit 0
     fi
@@ -269,7 +294,7 @@ case "$CMD" in
       swipe_once
       sleep 1
       NEW_PAGE="$(get_page_source "$SESSION_ID")"
-      if echo "$NEW_PAGE" | grep -qF "$SUBSTR"; then
+      if page_contains "$NEW_PAGE" "$SUBSTR"; then
         echo "FOUND: $SUBSTR (after $i scroll(s) $DIRECTION)"
         exit 0
       fi
@@ -300,7 +325,7 @@ case "$CMD" in
     [[ -n "$SUBSTR" ]] || fail "Usage: appium_action.sh contains <substring>"
     SESSION_ID="$(resolve_session_id)"
     PAGE="$(get_page_source "$SESSION_ID")"
-    if echo "$PAGE" | grep -qF "$SUBSTR"; then
+    if page_contains "$PAGE" "$SUBSTR"; then
       echo "FOUND: $SUBSTR"
       exit 0
     else
@@ -320,7 +345,7 @@ case "$CMD" in
     PAGE="$(get_page_source "$SESSION_ID")"
     FAIL_COUNT=0
     for SUBSTR in "$@"; do
-      if echo "$PAGE" | grep -qF "$SUBSTR"; then
+      if page_contains "$PAGE" "$SUBSTR"; then
         echo "FOUND: $SUBSTR"
       else
         echo "NOT FOUND: $SUBSTR"
@@ -330,12 +355,60 @@ case "$CMD" in
     [[ $FAIL_COUNT -eq 0 ]] || exit 1
     ;;
 
+  tap-on)
+    # Tap the centre of the first element whose text/content-desc contains
+    # <substring>, instead of hardcoding x/y read off a screenshot. Screenshot
+    # coordinates are tied to one screen resolution and one layout revision;
+    # this resolves the element's real bounds at run time, so a flow doc
+    # survives a device change or a UI nudge that moves the button 40px.
+    #
+    # Picks the SMALLEST element containing the text, not the first one in
+    # document order. The hierarchy is nested, so a parent container — often
+    # the root itself, bounds [0,0][width,height] — also "contains" the
+    # string; tapping its centre hits whatever happens to sit in the middle of
+    # the screen. Smallest-area is the node the user would point at.
+    SUBSTR="${1:-}"
+    [[ -n "$SUBSTR" ]] || fail "Usage: appium_action.sh tap-on <substring>"
+    SESSION_ID="$(resolve_session_id)"
+    PAGE="$(get_page_source "$SESSION_ID")"
+    MATCHES=$(echo "$PAGE" | tr '<' '\n' | grep -F "$SUBSTR")
+    if [[ -z "$MATCHES" ]]; then
+      ESCAPED="$(xml_escape "$SUBSTR")"
+      [[ "$ESCAPED" != "$SUBSTR" ]] && MATCHES=$(echo "$PAGE" | tr '<' '\n' | grep -F "$ESCAPED")
+    fi
+    [[ -n "$MATCHES" ]] || fail "No element containing '$SUBSTR' found in current source."
+
+    BEST_AREA=-1; CX=""; CY=""; BEST_BOUNDS=""
+    while IFS= read -r NODE; do
+      B=$(echo "$NODE" | grep -o 'bounds="\[[0-9-]\+,[0-9-]\+\]\[[0-9-]\+,[0-9-]\+\]"' | head -1)
+      [[ -n "$B" ]] || continue
+      C=$(echo "$B" | grep -o '[0-9-]\+')
+      x1=$(echo "$C" | sed -n 1p); y1=$(echo "$C" | sed -n 2p)
+      x2=$(echo "$C" | sed -n 3p); y2=$(echo "$C" | sed -n 4p)
+      area=$(( (x2 - x1) * (y2 - y1) ))
+      (( area > 0 )) || continue
+      if (( BEST_AREA < 0 || area < BEST_AREA )); then
+        BEST_AREA=$area
+        CX=$(( (x1 + x2) / 2 )); CY=$(( (y1 + y2) / 2 ))
+        BEST_BOUNDS="[$x1,$y1][$x2,$y2]"
+      fi
+    done <<< "$MATCHES"
+
+    [[ -n "$CX" ]] || fail "Element(s) containing '$SUBSTR' have no usable bounds — tap by coordinates instead."
+    do_tap "$SESSION_ID" "$CX" "$CY"
+    echo "Tapped '$SUBSTR' at ($CX,$CY) — smallest matching element, bounds $BEST_BOUNDS"
+    ;;
+
   find)
     SUBSTR="${1:-}"
     [[ -n "$SUBSTR" ]] || fail "Usage: appium_action.sh find <substring>"
     SESSION_ID="$(resolve_session_id)"
     PAGE="$(get_page_source "$SESSION_ID")"
     MATCHES=$(echo "$PAGE" | grep -F "$SUBSTR" | grep -o 'bounds="\[[0-9,-]*\]\[[0-9,-]*\]"')
+    if [[ -z "$MATCHES" ]]; then
+      ESCAPED="$(xml_escape "$SUBSTR")"
+      [[ "$ESCAPED" != "$SUBSTR" ]] && MATCHES=$(echo "$PAGE" | grep -F "$ESCAPED" | grep -o 'bounds="\[[0-9,-]*\]\[[0-9,-]*\]"')
+    fi
     [[ -n "$MATCHES" ]] || fail "No element containing '$SUBSTR' found in current source."
     echo "$MATCHES"
     ;;
@@ -347,7 +420,7 @@ case "$CMD" in
     ELAPSED=0
     while (( ELAPSED < TIMEOUT )); do
       PAGE="$(get_page_source "$SESSION_ID")"
-      if echo "$PAGE" | grep -qF "$SUBSTR"; then
+      if page_contains "$PAGE" "$SUBSTR"; then
         echo "FOUND: $SUBSTR (after ${ELAPSED}s)"
         exit 0
       fi
@@ -365,7 +438,7 @@ case "$CMD" in
     ELAPSED=0
     while (( ELAPSED < TIMEOUT )); do
       PAGE="$(get_page_source "$SESSION_ID")"
-      if ! echo "$PAGE" | grep -qF "$SUBSTR"; then
+      if ! page_contains "$PAGE" "$SUBSTR"; then
         echo "GONE: $SUBSTR (after ${ELAPSED}s)"
         exit 0
       fi

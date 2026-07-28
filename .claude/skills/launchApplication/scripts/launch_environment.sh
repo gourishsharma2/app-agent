@@ -10,12 +10,41 @@
 #
 # Usage:
 #   launch_environment.sh /absolute/path/to/app.apk
+#   launch_environment.sh doctor      # check the toolchain without installing anything
 #
 # Env overrides:
+#   ANDROID_HOME - Android SDK location (auto-detected if unset; see resolve_sdk below)
 #   AVD_NAME   - which AVD to boot if no emulator is running (default: first from `emulator -list-avds`)
 #   APPIUM_URL - Appium server base URL (default: appiumServerUrl from config.properties, else http://localhost:4723)
 
 set -uo pipefail
+
+# ---------------------------------------------------------------------------
+# Step -1: Locate the Android SDK.
+#
+# Android Studio installs the SDK but does NOT put `emulator`, `adb` or
+# `sdkmanager` on your PATH, and does not export ANDROID_HOME — that's a
+# manual shell-profile edit most people never make. Previously this script
+# just died with "emulator CLI not found on PATH" on a fresh machine even
+# though the SDK was sitting right there. Resolve it ourselves so the script
+# works out of the box, while still honouring an explicit ANDROID_HOME.
+# ---------------------------------------------------------------------------
+resolve_sdk() {
+  if [[ -z "${ANDROID_HOME:-}" ]]; then
+    local candidate
+    for candidate in "${ANDROID_SDK_ROOT:-}" "$HOME/Library/Android/sdk" "$HOME/Android/Sdk" "/usr/local/share/android-sdk"; do
+      if [[ -n "$candidate" && -d "$candidate/platform-tools" ]]; then
+        export ANDROID_HOME="$candidate"
+        break
+      fi
+    done
+  fi
+  if [[ -n "${ANDROID_HOME:-}" ]]; then
+    export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+    export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
+  fi
+}
+resolve_sdk
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
@@ -42,19 +71,8 @@ info() { echo "ℹ️  $1"; }
 ok()   { echo "✅ $1"; }
 warn() { echo "⚠️  $1" >&2; }
 
-# ---------------------------------------------------------------------------
-# Step 0: Resolve inputs / config
-# ---------------------------------------------------------------------------
-STEP="Argument validation"
-APK_PATH="${1:-}"
-[[ -n "$APK_PATH" ]] || fail "No APK path provided. Usage: launch_environment.sh <path-to-apk>"
-[[ -f "$APK_PATH" ]] || fail "APK not found at path: $APK_PATH"
-case "$APK_PATH" in
-  *.apk) ;;
-  *) fail "Provided file is not an .apk: $APK_PATH" ;;
-esac
-ABS_APK_PATH="$(cd "$(dirname "$APK_PATH")" && pwd)/$(basename "$APK_PATH")"
-
+# Resolved here (rather than further down with the rest of Step 0) because
+# `doctor` needs both of these before any APK argument is validated.
 APPIUM_URL="${APPIUM_URL:-}"
 if [[ -z "$APPIUM_URL" ]]; then
   APPIUM_URL="http://localhost:4723"
@@ -63,7 +81,121 @@ if [[ -z "$APPIUM_URL" ]]; then
     [[ -n "${cfg_url:-}" ]] && APPIUM_URL="$cfg_url"
   fi
 fi
-info "Target APK: $ABS_APK_PATH"
+
+appium_ready() {
+  curl -s -o /dev/null -w "%{http_code}" "$APPIUM_URL/status" 2>/dev/null | grep -q "^200$"
+}
+
+# ---------------------------------------------------------------------------
+# Step 0: Resolve inputs / config
+# ---------------------------------------------------------------------------
+STEP="Argument validation"
+APK_PATH="${1:-}"
+
+# ---------------------------------------------------------------------------
+# doctor — verify the toolchain is usable before anyone tries a real run.
+# Reports every problem it finds rather than stopping at the first, so one
+# pass tells you everything that needs fixing.
+# ---------------------------------------------------------------------------
+if [[ "$APK_PATH" == "doctor" ]]; then
+  PROBLEMS=0
+  echo "Android automation environment check"
+  echo "===================================="
+  if [[ -n "${ANDROID_HOME:-}" ]]; then
+    ok "Android SDK: $ANDROID_HOME"
+  else
+    warn "Android SDK not found. Install it via Android Studio > Settings > Languages & Frameworks > Android SDK, or set ANDROID_HOME."
+    PROBLEMS=$((PROBLEMS + 1))
+  fi
+
+  for tool in adb emulator java node curl; do
+    if command -v "$tool" >/dev/null 2>&1; then
+      ok "$tool: $(command -v "$tool")"
+    else
+      warn "$tool not found on PATH."
+      PROBLEMS=$((PROBLEMS + 1))
+    fi
+  done
+
+  if command -v avdmanager >/dev/null 2>&1; then
+    ok "avdmanager: $(command -v avdmanager)"
+  else
+    warn "avdmanager/sdkmanager not found — install 'Android SDK Command-line Tools (latest)' in Android Studio's SDK Manager (SDK Tools tab) if you need to create AVDs from the CLI."
+  fi
+
+  if command -v appium >/dev/null 2>&1; then
+    ok "appium: $(appium --version 2>/dev/null)"
+    if appium driver list --installed 2>&1 | grep -q uiautomator2; then
+      ok "appium uiautomator2 driver installed"
+    else
+      warn "uiautomator2 driver missing — install with: appium driver install uiautomator2"
+      PROBLEMS=$((PROBLEMS + 1))
+    fi
+  else
+    warn "appium not found — install with: npm install -g appium"
+    PROBLEMS=$((PROBLEMS + 1))
+  fi
+
+  if appium_ready 2>/dev/null; then
+    ok "Appium server responding at $APPIUM_URL"
+  else
+    info "Appium server not running at $APPIUM_URL (this script starts one automatically when needed)."
+  fi
+
+  AVDS="$(emulator -list-avds 2>/dev/null | grep -v '|')"
+  if [[ -n "$AVDS" ]]; then
+    ok "AVDs available:"
+    echo "$AVDS" | sed 's/^/     /'
+  else
+    warn "No AVD found. Create one in Android Studio > Device Manager, or with avdmanager."
+    PROBLEMS=$((PROBLEMS + 1))
+  fi
+
+  RUNNING="$(adb devices 2>/dev/null | awk '$2=="device" && $1 ~ /^emulator-/ {print $1}')"
+  if [[ -n "$RUNNING" ]]; then
+    ok "Emulator running: $RUNNING (API $(adb -s "${RUNNING%% *}" shell getprop ro.build.version.sdk 2>/dev/null | tr -d '\r'))"
+  else
+    info "No emulator currently running — one will be booted on the next run."
+  fi
+
+  if [[ -d "$PROJECT_ROOT/apk" ]] && ls "$PROJECT_ROOT/apk"/*.apk >/dev/null 2>&1; then
+    ok "APK builds present in apk/"
+  else
+    warn "No APK found in apk/ — /run needs a build there before it can install anything."
+    PROBLEMS=$((PROBLEMS + 1))
+  fi
+
+  echo ""
+  if [[ $PROBLEMS -eq 0 ]]; then
+    ok "Environment looks ready."
+  else
+    warn "$PROBLEMS problem(s) found — see the warnings above."
+  fi
+  exit $(( PROBLEMS > 0 ? 1 : 0 ))
+fi
+
+# `boot` brings the environment up (Appium + emulator, no install) — for
+# running against an app that is already installed, or for API-only checks
+# that still need an Appium session to read the screen.
+BOOT_ONLY="false"
+if [[ "$APK_PATH" == "boot" ]]; then
+  BOOT_ONLY="true"
+  ABS_APK_PATH=""
+else
+  [[ -n "$APK_PATH" ]] || fail "No APK path provided. Usage: launch_environment.sh <path-to-apk|boot|doctor>"
+  [[ -f "$APK_PATH" ]] || fail "APK not found at path: $APK_PATH"
+  case "$APK_PATH" in
+    *.apk) ;;
+    *) fail "Provided file is not an .apk: $APK_PATH" ;;
+  esac
+  ABS_APK_PATH="$(cd "$(dirname "$APK_PATH")" && pwd)/$(basename "$APK_PATH")"
+fi
+
+if [[ "$BOOT_ONLY" == "true" ]]; then
+  info "Mode: boot only (no APK install)"
+else
+  info "Target APK: $ABS_APK_PATH"
+fi
 info "Appium URL: $APPIUM_URL"
 
 command -v adb >/dev/null 2>&1 || fail "adb not found on PATH. Ensure Android SDK platform-tools is on PATH."
@@ -74,9 +206,6 @@ command -v curl >/dev/null 2>&1 || fail "curl not found on PATH."
 # ---------------------------------------------------------------------------
 STEP="Appium server"
 info "Checking Appium server at $APPIUM_URL ..."
-appium_ready() {
-  curl -s -o /dev/null -w "%{http_code}" "$APPIUM_URL/status" 2>/dev/null | grep -q "^200$"
-}
 
 if appium_ready; then
   ok "Appium server already running at $APPIUM_URL — reusing it."
@@ -173,6 +302,13 @@ if adb -s "$DEVICE_SERIAL" shell settings put system screen_off_timeout 1800000 
   ok "Screen sleep timeout set to 30 minutes on $DEVICE_SERIAL."
 else
   warn "Could not set screen_off_timeout on $DEVICE_SERIAL — screen may still sleep during a long-idle run."
+fi
+
+if [[ "$BOOT_ONLY" == "true" ]]; then
+  echo ""
+  ok "Environment ready (boot only) — Appium: $APPIUM_URL | Device: $DEVICE_SERIAL | no APK installed."
+  info "Open a session against an already-installed app with: .claude/skills/driveFlow/scripts/appium_action.sh open-session <appPackage> <appActivity>"
+  exit 0
 fi
 
 # ---------------------------------------------------------------------------

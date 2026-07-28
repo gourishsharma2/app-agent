@@ -145,9 +145,21 @@ interpolated motion-event sequence, which Compose's scroll gesture detector
 recognizes consistently across devices and screen sizes (coordinates are
 still computed from `window/rect`, so nothing is hardcoded to one resolution).
 `long-press`, `double-tap`, and `back` (the hardware back button) cover the
-other common gestures a flow doc might call for; `hide-keyboard` is useful
-right after `type` if an on-screen keyboard is covering a button you need to
-tap next.
+other common gestures a flow doc might call for.
+
+**Careful with `hide-keyboard`.** On Android, UiAutomator2 implements it as a
+back press. If nothing is left to dismiss it pops the current activity
+instead — observed live on the Operator login screen, where it closed the app
+back to the launcher mid-flow. Only use it when a keyboard is genuinely
+covering the element you need, and re-check `contains` afterwards to confirm
+you're still on the same screen. Often the better move is simply to tap the
+target directly: the keyboard covers the bottom of the screen, and most CTAs
+sit above it.
+
+Note also that re-running `open-session` does **not** reliably bring a
+backgrounded app back to the foreground (`noReset` keeps the existing process,
+and Appium may not re-launch the activity). If a session opens but the app
+isn't on screen, tap the app's launcher icon to bring it back.
 
 ## Waiting for loading states
 
@@ -183,6 +195,26 @@ present after tapping X" assertion, capture `source` (or a targeted
 
 If a step has no Assertions list, fall back to the prior behavior: read
 `source` and judge by eye whether the screen matches the doc's description.
+
+### Text with `&`, `<`, `>` or `"` in it
+
+The page source is XML, so those characters arrive escaped — the Settings
+screen's "Network & internet" is `Network &amp; internet` in the dump. This
+silently broke assertions like `contains "View & pay"` in
+`flow/homePage.md`, which could never match no matter what was on screen.
+`contains`/`assert-all`/`find`/`wait-for`/`wait-until-gone`/`scroll-to` now
+check the literal string first and then its XML-escaped form, so write
+assertion text the way it actually appears on screen and don't hand-escape
+it in the doc.
+
+### Data-driven values belong in an API check, not a `contains`
+
+`contains "All (94)"` was true the day the screenshot was taken. Counts,
+balances, speeds and addresses move, so a literal assertion on them fails
+identically whether the app broke or the fleet simply changed — the test
+can't tell you which. Assert the static chrome here (`contains "All ("`) and
+verify the number against the backend with the `apiCheck` skill
+(`compare-ui`). See `.claude/skills/apiCheck/SKILL.md` and `api/README.md`.
 
 ## Scope
 

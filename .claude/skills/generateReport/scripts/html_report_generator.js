@@ -69,10 +69,17 @@ function render(data) {
   const total = steps.length;
   const successRate = total > 0 ? Math.round((counts.pass / total) * 100) : 0;
 
+  // API validations come straight from `api_action.sh results --json` — the
+  // checks the apiCheck skill actually recorded during the run. Never a
+  // hand-written summary, same rule as token counts and timestamps.
+  const apiChecks = Array.isArray(data.apiChecks) ? data.apiChecks : [];
+  const apiCounts = { pass: 0, fail: 0, skip: 0 };
+  apiChecks.forEach(c => { apiCounts[normalizeResult(c.result)]++; });
+
   const overallRaw = String(data.overallResult || '').trim().toLowerCase();
   const overallPass = overallRaw
     ? (overallRaw.includes('pass') || overallRaw.includes('✅'))
-    : counts.fail === 0;
+    : counts.fail === 0 && apiCounts.fail === 0;
   const overallKind = overallPass ? 'pass' : 'fail';
 
   const execDate = formatTimestamp(data.runStart) || 'N/A';
@@ -114,8 +121,36 @@ function render(data) {
         </tr>`;
   }).join('');
 
+  const apiRows = apiChecks.map(c => {
+    const kind = normalizeResult(c.result);
+    return `
+        <tr class="row-${kind}">
+          <td>${escBlank(c.name) || 'N/A'}</td>
+          <td class="mono">${escBlank(c.expected) || 'N/A'}</td>
+          <td class="mono">${escBlank(c.actual) || 'N/A'}</td>
+          <td>${badge(kind)}</td>
+          <td>${escBlank(c.notes)}</td>
+        </tr>`;
+  }).join('');
+
+  const apiSectionHtml = apiChecks.length ? `
+    <section class="card">
+      <h2>API Validations</h2>
+      <p class="section-note">Backend response checks, and comparisons of the API's values against what the app displayed — ${apiCounts.pass} passed, ${apiCounts.fail} failed.</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Check</th><th>Expected (API)</th><th>Actual</th><th>Result</th><th>Notes</th></tr>
+          </thead>
+          <tbody>${apiRows}
+          </tbody>
+        </table>
+      </div>
+    </section>` : '';
+
   const failedSteps = steps.filter(s => normalizeResult(s.result) === 'fail');
-  const failureSectionHtml = failedSteps.length ? `
+  const failedApi = apiChecks.filter(c => normalizeResult(c.result) === 'fail');
+  const failureSectionHtml = (failedSteps.length || failedApi.length) ? `
     <section class="card failure-card">
       <h2>⚠️ Failure Details</h2>
       ${failedSteps.map(s => `
@@ -124,6 +159,14 @@ function render(data) {
         <div class="failure-row"><span class="failure-label">Assertion:</span> <span class="mono">${escBlank(s.assertion) || 'N/A'}</span></div>
         <div class="failure-row"><span class="failure-label">Failure Reason:</span> ${esc(s.notes)}</div>
         <div class="failure-row"><span class="failure-label">Timestamp:</span> ${esc(s.timestamp)}</div>
+      </div>`).join('')}
+      ${failedApi.map(c => `
+      <div class="failure-item">
+        <div class="failure-row"><span class="failure-label">Failed API Check:</span> ${esc(c.name)}</div>
+        <div class="failure-row"><span class="failure-label">Expected (API):</span> <span class="mono">${escBlank(c.expected) || 'N/A'}</span></div>
+        <div class="failure-row"><span class="failure-label">Actual:</span> <span class="mono">${escBlank(c.actual) || 'N/A'}</span></div>
+        <div class="failure-row"><span class="failure-label">Failure Reason:</span> ${esc(c.notes)}</div>
+        <div class="failure-row"><span class="failure-label">Timestamp:</span> ${esc(c.timestamp)}</div>
       </div>`).join('')}
     </section>` : '';
 
@@ -179,6 +222,7 @@ function render(data) {
     padding: 24px 28px; box-shadow: var(--shadow); margin-bottom: 24px;
   }
   .card h2 { margin-top: 0; font-size: 1.15rem; }
+  .section-note { margin: -6px 0 14px; color: var(--muted); font-size: .85rem; }
   .summary-card { padding: 0; }
   .summary-card > summary {
     cursor: pointer;
@@ -285,6 +329,7 @@ function render(data) {
       </div>
     </section>
 
+    ${apiSectionHtml}
     <section class="card stats-card">
       <h2>Statistics</h2>
       <div class="stats-grid">

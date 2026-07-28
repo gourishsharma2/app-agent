@@ -26,6 +26,32 @@ Run the bundled script, passing the APK path as the only argument:
 .claude/skills/launchApplication/scripts/launch_environment.sh /absolute/path/to/app.apk
 ```
 
+Two other modes take the place of an APK path:
+
+```bash
+.claude/skills/launchApplication/scripts/launch_environment.sh doctor
+# Checks the whole toolchain — SDK location, adb/emulator/java/node/curl,
+# appium + uiautomator2 driver, available AVDs, whether an emulator is
+# running, whether apk/ has a build — and reports EVERY problem in one pass
+# rather than stopping at the first. Run this before debugging anything else.
+
+.claude/skills/launchApplication/scripts/launch_environment.sh boot
+# Steps 1-4 only: Appium server + emulator + boot wait + screen-sleep off,
+# with NO install. Use it when the app is already installed, or for API-only
+# checks that still need an Appium session to read the screen.
+```
+
+### The SDK is located automatically
+
+Android Studio installs the SDK but does not export `ANDROID_HOME` or put
+`adb`/`emulator` on your PATH — a shell-profile edit most people never make.
+The script now resolves the SDK itself (honouring `ANDROID_HOME`/
+`ANDROID_SDK_ROOT` if set, otherwise checking `~/Library/Android/sdk`,
+`~/Android/Sdk`, `/usr/local/share/android-sdk`) and prepends
+`platform-tools`, `emulator` and `cmdline-tools/latest/bin` to PATH for its
+own execution. Previously it died with "emulator CLI not found on PATH" on a
+fresh machine even though the SDK was sitting right there.
+
 It performs, in order, stopping immediately with a clear `❌ FAILED at step: ...`
 message on the first failure:
 

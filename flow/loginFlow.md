@@ -2,6 +2,10 @@
 
 This document describes the step-by-step application login flow for the WheelsEye ("operator") mobile app.
 
+> **Build differences.** Steps below were written against the debug build (`com.wheelseyeoperator.debug`, 23.7.0). On the production build verified 29 Jul 2026 (`com.wheelseyeoperator`, 24.1.0) the login screen shows a **Call us** button and a language toggle, and has **no Staging/Production toggle** and no visible **One Tap Login**. Assert those two only when driving the debug build.
+>
+> **Login is rate-limited.** A few failed or repeated attempts return "You have reached maximum login attempts, wait till 15 minutes before trying again" — from the backend, on both the UI and the API (`api/login.md`). On a shared test account, don't make a UI login the precondition of every test: log in once and rely on `noReset` keeping the session.
+
 ## Step 1: App launch / login screen
 
 Once the application is installed and launched, the "Login to your account" screen is displayed with a phone number field (pre-filled with the `+91` country code), a "Send OTP" button, and a "Continue with password" option below it. The screen also shows a WhatsApp/SMS/calls consent checkbox (checked by default), a "Forgot phone number?" link, a Staging/Production environment toggle, a "One Tap Login" option, and a "Don't have an account? Signup" link at the bottom.

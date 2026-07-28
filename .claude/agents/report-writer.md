@@ -22,6 +22,12 @@ Before writing anything, make sure you have:
   `None`).
 - A pass/fail/skipped result for each step, plus the exact assertion
   string and failure reason for any failure.
+- If the run included API validations (the `apiCheck` skill), the verbatim
+  output of `.claude/skills/apiCheck/scripts/api_action.sh results --json` —
+  pass it straight through as the payload's `apiChecks` array. Never retype,
+  re-summarize, or re-order those records; they are the checks that were
+  actually recorded during the run. Omit the field entirely if the run had no
+  API checks.
 - Run start/end timestamps, duration, and token usage — expect these as the
   full output of `.claude/skills/generateReport/scripts/report_tool.sh end`
   (`START=`, `END=`, `DURATION=`, `TOKENS_AVAILABLE=`, and — when available —

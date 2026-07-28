@@ -21,10 +21,33 @@ Three Claude Code skills, each backed by exactly one allowlisted shell entry poi
 | Skill | Entry point | Purpose |
 |---|---|---|
 | `launchApplication` | `.claude/skills/launchApplication/scripts/launch_environment.sh <apk>` | Starts Appium + boots the emulator + installs the APK (idempotent, swaps builds via explicit uninstall). Teardown: `close_environment.sh`. |
-| `driveFlow` | `.claude/skills/driveFlow/scripts/appium_action.sh <subcommand> ...` | Opens/closes the Appium session and does every tap/type/scroll/read/assert against the live screen. |
+| `driveFlow` | `.claude/skills/driveFlow/scripts/appium_action.sh <subcommand> ...` | Opens/closes the Appium session and does every tap/type/scroll/read/assert against the live screen — including `run-plan`, which deterministically drives an entire compiled plan (see below) in one call with no LLM reasoning inside it. |
 | `generateReport` | `.claude/skills/generateReport/scripts/report_tool.sh {start\|end\|new-paths\|render-html}` | Timestamps a run and renders the standard HTML report via `html_report_generator.js`. |
+| `compilePlan` | `.claude/skills/compilePlan/scripts/plan_tool.sh {check\|write\|patch}` | Hash-based cache validity checking, and atomic persistence, of compiled execution plans under `execution-plans/` — see "Compiled execution plans" below. |
 
-Corresponding agents wrap these skills with a narrower mandate: `env-manager` (environment lifecycle only), `flow-runner` (drives+verifies a flow, doesn't touch the environment), `report-writer` (formats/persists the report, doesn't drive or re-verify anything), `flow-documenter` (writes flow docs from screenshots, doesn't touch the live app), `app-researcher` (web research only, no repo/emulator/APK access).
+Corresponding agents wrap these skills with a narrower mandate: `env-manager` (environment lifecycle only), `flow-runner` (drives+verifies a flow via a compiled plan when one is valid, compiles one when it isn't, recovers locally on divergence — doesn't touch the environment), `flow-compiler` (turns a flow/test doc + its screenshots into a compiled plan — doesn't touch the live app), `report-writer` (formats/persists the report, doesn't drive or re-verify anything), `flow-documenter` (writes flow docs from screenshots, doesn't touch the live app), `app-researcher` (web research only, no repo/emulator/APK access).
+
+### Compiled execution plans
+
+Driving a flow the old way meant re-reading the whole `.md` doc and
+re-viewing every screenshot on every single run, to re-derive the same tap
+selectors and assertions derived last time. `flow-runner` now checks for a
+**compiled execution plan** first (`.claude/skills/compilePlan/scripts/plan_tool.sh check <flowName>` —
+pure hash comparison, no LLM cost) and only re-reads the doc/screenshots
+(same cost as before) on a cache miss, immediately saving the result to
+`execution-plans/<flowName>.plan.json` + `.meta.json`. Every run after that
+replays the plan deterministically via `appium_action.sh run-plan` — no
+markdown, no screenshots, no per-step reasoning — until the doc or a
+screenshot it references actually changes (detected automatically via
+content hashes in `.meta.json`, never a manual version number). A divergence
+between the plan and the live app triggers a **local** recovery pass scoped
+to the one mismatched step, which patches the plan
+(`plan_tool.sh patch <flowName> <stepId>`) so the same divergence self-heals
+instead of recurring on every future run. Full schema and rationale:
+`.claude/skills/compilePlan/SKILL.md`. The `.md` docs under `flow/`/`tests/`
+remain the human-readable source of truth; everything under
+`execution-plans/` is a derived, regenerable build artifact — never
+hand-edited.
 
 **The one hard rule that matters most in this repo:** never hand-roll a raw `curl`/`adb`/`node` command for something these scripts already do, and issue every script call as its own single plain command — never wrapped in `$(...)`, `&&`, or chained with anything else. `.claude/settings.json` allowlists these scripts by their *exact literal path*, is committed and shared across everyone using this repo, and a wrapped/combined/hand-rolled invocation breaks that match and reintroduces a permission prompt for every future session, for every user. If a new capability is needed, add a subcommand to the relevant script rather than reaching for a one-off shell command. `.claude/settings.local.json` is per-machine and uncommitted — never rely on it for anything that needs to work for a teammate or a fresh session.
 
@@ -35,6 +58,7 @@ Corresponding agents wrap these skills with a narrower mandate: `env-manager` (e
 - `tests/*.md` / `tests/<category>/*.md` — end-to-end business flows composed from one or more `flow/*.md` docs (e.g. `tests/VerifyGpsListing.md`).
 - `summary/*.md` — hand-maintained rollups (application-summary, flows-summary, screens-summary, reusable-summary, known-issues-summary, automation-status). These can go stale — `/list_flow` and `/run` always discover flows from the filesystem directly, never from these summaries.
 - `execution/report/` — generated HTML run reports (`<flow_name>-<yyyyMMdd-HHmmss>.html`); `execution/logs/` — optional raw evidence (full UI-source dumps) per run.
+- `execution-plans/` — compiled execution plans (`<flow_name>.plan.json` + `.meta.json`), one pair per flow/test doc — see "Compiled execution plans" above. Generated by `flow-compiler`/`flow-runner`, never hand-edited; safe to delete (the next run just recompiles).
 - `apk/` — where `/run` expects build files to live (not present until builds are added).
 - `config.properties` — automation-harness config only (`platform`, `appiumServerUrl`) — **not** the same as the app's own in-app Staging/Production toggle on the login screen, which controls which backend/data the app talks to.
 

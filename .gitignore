@@ -22,3 +22,6 @@
 
 ### generateReport skill (transient run state) ###
 .claude/skills/generateReport/.run_state
+
+### APK builds ###
+apk/

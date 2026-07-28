@@ -28,8 +28,13 @@ verified against the backend rather than hardcoded (see
 .claude/skills/apiCheck/scripts/api_action.sh assert-json success true
 .claude/skills/apiCheck/scripts/api_action.sh compare-ui data.running --normalize number --in "Running" --label "Running chip == API running count"
 .claude/skills/apiCheck/scripts/api_action.sh compare-ui data.stoppage --normalize number --in "Stopped" --label "Stopped chip == API stoppage count"
-.claude/skills/apiCheck/scripts/api_action.sh compare-ui "sum(data.running,data.stoppage,data.noInfo)" --normalize number --in "All" --label "All chip == running+stoppage+noInfo"
 ```
+
+The **All** chip is deliberately *not* checked here: it is not
+`running + stoppage + noInfo`. Verified live on 29 Jul 2026 — the API summed
+to 85 while the chip read 95, at the same moment Running and Stopped matched
+exactly. Its real source hasn't been identified yet; see the "The All chip
+does NOT come from this endpoint" section of `api/vehicleFilterCount.md`.
 
 Run these while the Vehicles tab is on screen and the list has finished
 loading. Requires a token — `api_action.sh token-from-device <appPackage>`

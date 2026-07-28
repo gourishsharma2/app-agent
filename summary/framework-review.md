@@ -164,6 +164,27 @@ retrying an assertion is how a flaky test becomes a lying test.
 It prints bounds only, so with several matches you can't tell which element
 is which. Recommendation: print `text/content-desc → bounds` pairs.
 
+## What the first live run found
+
+The UI-vs-API comparison was run against the real app on 29 Jul 2026
+(`com.wheelseyeoperator` 24.1.0, logged in as WE25622). Report:
+`execution/report/VerifyGpsListing-API-20260729-010055.html`.
+
+- Running chip == `data.running` (2) — **PASS**
+- Stopped chip == `data.stoppage` (2) — **PASS**
+- All chip vs `sum(running,stoppage,noInfo)` — **the mapping was wrong.** The
+  API summed to 85; the chip read 95, at the same instant the other two
+  matched exactly. The All total comes from a source outside
+  `getAllFilterCount`, still unidentified (`sniff` found nothing — this build
+  doesn't log request URLs). The contract doc was corrected to mark the All
+  mapping unknown rather than forcing the assertion green.
+
+Worth noting *because* it was a miss: the value of this layer is that a wrong
+assumption produced a specific, actionable discrepancy (85 vs 95) on its
+first real run, instead of a vague "the count looks off". The old hardcoded
+`contains "All (94)"` would have failed here too — but it would have told you
+nothing about why.
+
 ## Applies to the new API layer too
 
 The same pitfalls exist on the API side and are handled explicitly, but they

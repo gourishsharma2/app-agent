@@ -12,13 +12,13 @@ This project automates the WheelsEye **Operator** Android app **without writing 
 ## Coverage so far
 | Doc | Status |
 |---|---|
-| `flow/loginFlow.md` | Documented (password login path); driven 29 Jul 2026 up to the Login tap — blocked by the backend's 15-minute login rate limit, not by the app |
+| `flow/loginFlow.md` | Documented (password login path); **driven end to end and passing 29 Jul 2026** on `com.wheelseyeoperator` 24.1.0 (after waiting out the backend's 15-minute login rate limit) |
 | `flow/homePage.md` | Documented (FasTag tab) — not yet driven/run. Note its `contains "View & pay"` assertion could never match before the XML-escaping fix (see `summary/framework-review.md`) |
 | `flow/gpsListingFlow.md` | Documented (Vehicles tab: All/Running/Stopped) — not yet driven/run |
 | `tests/VerifyGpsListing.md` | Documented (login → GPS listing verification, incl. scroll-to-card check + API validations) — not yet driven/run |
 | `api/login.md` | Documented — endpoint verified live (returns 401 rate-limit when over-used) |
 | `api/servicesInfo.md` | Documented — endpoint verified live (HTTP 200) |
-| `api/vehicleFilterCount.md` | Documented — endpoint verified live (HTTP 200); UI mapping not yet run against the app |
+| `api/vehicleFilterCount.md` | Documented — endpoint verified live (HTTP 200). **UI mapping run against the live app 29 Jul 2026:** Running and Stopped chips match the API exactly; the All chip does **not** equal `running+stoppage+noInfo` (UI 95 vs API 85) and its real source is still unidentified |
 | `api/vehiclesDynamic.md` | Documented — endpoint verified live (HTTP 200); UI mapping not yet run against the app |
 
 ## Not yet started

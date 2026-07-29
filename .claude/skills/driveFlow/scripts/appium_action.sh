@@ -35,7 +35,14 @@
 #                                            # instead of piping `source` through a raw grep call
 #   appium_action.sh wait-for <substring> [timeoutSeconds]        # poll until substring appears (default 30s)
 #   appium_action.sh wait-until-gone <substring> [timeoutSeconds] # poll until substring disappears (default 30s) — for loading states
-#   appium_action.sh screenshot [name]      # saves a PNG under ../screenshots/, prints the saved path
+#   appium_action.sh run-plan <plan.json> [--from-step N]  # deterministically drives an ENTIRE compiled
+#                                            # execution plan (see .claude/skills/compilePlan/SKILL.md) in one
+#                                            # call — opens/reuses a session per the plan's appPackage/appActivity,
+#                                            # dispatches every step's action(s), checks screenMarker + assertions,
+#                                            # and stops at the first real divergence instead of guessing. Prints
+#                                            # one `PLAN_RESULT_JSON=...` line; leaves the session OPEN on exit
+#                                            # (pass or diverge) so a recovery pass or a resumed --from-step call
+#                                            # can reuse it. No LLM calls happen inside this — that's the point.
 #   appium_action.sh close-session
 #
 # All swipe/scroll/scroll-to gestures are driven via `adb shell input swipe`
@@ -46,8 +53,8 @@
 # fixed-count retry loop can silently skip past the target element. `adb
 # shell input swipe` synthesizes a real interpolated motion-event sequence
 # over the given duration, which Compose's scroll/fling gesture detector
-# recognizes consistently. Since `type`/`back`/`screenshot` already go
-# through adb in this script, this keeps one gesture mechanism instead of two.
+# recognizes consistently. Since `type`/`back` already go through adb in
+# this script, this keeps one gesture mechanism instead of two.
 
 set -uo pipefail
 
@@ -55,7 +62,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 CONFIG_FILE="$PROJECT_ROOT/config.properties"
 STATE_FILE="$SCRIPT_DIR/../.session_state"
-SCREENSHOT_DIR="$SCRIPT_DIR/../screenshots"
 
 APPIUM_URL="${APPIUM_URL:-}"
 if [[ -z "$APPIUM_URL" ]]; then
@@ -96,7 +102,7 @@ do_swipe() {
 }
 
 CMD="${1:-}"
-[[ -n "$CMD" ]] || fail "Usage: appium_action.sh <open-session|tap|long-press|double-tap|type|back|hide-keyboard|wake-screen|swipe|scroll|scroll-to|source|contains|assert-all|find|wait-for|wait-until-gone|screenshot|close-session> [args]"
+[[ -n "$CMD" ]] || fail "Usage: appium_action.sh <open-session|tap|long-press|double-tap|type|back|hide-keyboard|wake-screen|swipe|scroll|scroll-to|source|contains|assert-all|find|wait-for|wait-until-gone|run-plan|close-session> [args]"
 shift || true
 
 case "$CMD" in
@@ -376,14 +382,20 @@ case "$CMD" in
     exit 1
     ;;
 
-  screenshot)
-    NAME="${1:-capture}"
+  run-plan)
+    PLAN_FILE="${1:-}"
+    [[ -n "$PLAN_FILE" ]] || fail "Usage: appium_action.sh run-plan <plan.json> [--from-step N]"
+    [[ -f "$PLAN_FILE" ]] || fail "Plan file not found: $PLAN_FILE"
+    shift || true
+    FROM_STEP=1
+    if [[ "${1:-}" == "--from-step" ]]; then
+      FROM_STEP="${2:-1}"
+    fi
+    command -v python3 >/dev/null 2>&1 || fail "python3 is required for run-plan but was not found on PATH."
     DEVICE_SERIAL="$(running_emulator)"
-    [[ -n "$DEVICE_SERIAL" ]] || fail "No running emulator detected (adb devices)."
-    mkdir -p "$SCREENSHOT_DIR"
-    OUT_PATH="$SCREENSHOT_DIR/${NAME}.png"
-    adb -s "$DEVICE_SERIAL" exec-out screencap -p > "$OUT_PATH"
-    echo "$OUT_PATH"
+    [[ -n "$DEVICE_SERIAL" ]] || fail "No running emulator detected (adb devices). Run launchApplication first."
+    python3 "$SCRIPT_DIR/run_plan.py" "$PLAN_FILE" "$FROM_STEP" "$APPIUM_URL" "$STATE_FILE" "$DEVICE_SERIAL"
+    exit $?
     ;;
 
   close-session)

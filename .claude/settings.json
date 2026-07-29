@@ -12,13 +12,16 @@
       "Bash(curl -s -X POST http://localhost:4723/session -H 'Content-Type: application/json' -d '{ *)",
       "Bash(.claude/skills/driveFlow/scripts/appium_action.sh *)",
       "Bash(.claude/skills/generateReport/scripts/report_tool.sh *)",
+      "Bash(.claude/skills/compilePlan/scripts/plan_tool.sh *)",
       "Bash(aapt dump *)",
       "Skill(run)",
       "Skill(list_flow)",
       "Skill(launchApplication)",
       "Skill(driveFlow)",
       "Skill(generateReport)",
+      "Skill(compilePlan)",
       "Agent(flow-runner)",
+      "Agent(flow-compiler)",
       "Agent(report-writer)"
     ]
   }

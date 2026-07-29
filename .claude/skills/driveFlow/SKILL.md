@@ -36,8 +36,8 @@ for everyone else, and can even re-prompt for the same user later if the
 detail it's pinned to (like the emulator serial) changes.
 
 So: never invent a new raw `curl`/`adb`/`chmod` one-liner to get something
-done. If a task needs a new capability (e.g. capturing a screenshot), add a
-new subcommand to `appium_action.sh` (or `launch_environment.sh` /
+done. If a task needs a new capability, add a new subcommand to
+`appium_action.sh` (or `launch_environment.sh` /
 `close_environment.sh` for environment setup/teardown) and call it through
 the existing fixed script path — that path is already allowlisted, so nothing
 new needs to be added to settings for it to stay prompt-free, for anyone,
@@ -80,15 +80,22 @@ call is what keeps this prompt-free.
 .claude/skills/driveFlow/scripts/appium_action.sh find "some text"     # prints bounds="[x1,y1][x2,y2]" for each matching element
 .claude/skills/driveFlow/scripts/appium_action.sh wait-for "some text" [timeoutSeconds]        # poll until it appears (default 30s)
 .claude/skills/driveFlow/scripts/appium_action.sh wait-until-gone "some text" [timeoutSeconds]  # poll until it disappears (default 30s) — for loading states
-.claude/skills/driveFlow/scripts/appium_action.sh screenshot [name]    # saves a PNG under .claude/skills/driveFlow/screenshots/, prints the path — Read that path to view it
 
 # 3. Always close the session when done — this also clears the state file.
 .claude/skills/driveFlow/scripts/appium_action.sh close-session
 ```
 
-Never fall back to a raw `adb exec-out screencap` or `adb shell screencap` one-liner to grab a screenshot — that reintroduces the exact hand-rolled-command problem this skill exists to avoid (see "Why this exists" above), since a device-serial-specific command can't be allowlisted stably. Use the `screenshot` subcommand above instead — it resolves the emulator serial itself and stays under the one already-allowlisted script path.
+There is deliberately no screenshot/vision capability in this script. Every
+question this skill answers — where an element is, whether a screen
+transition landed, whether text is present — comes from the UI hierarchy XML
+(`source`/`find`/`contains`/`assert-all`), which is exact and free of visual
+ambiguity. Compiled-plan authoring (`flow-compiler`) is the only place in
+this pipeline that still looks at pixels, and it reads the flow doc's own
+documentation screenshots directly with the `Read` tool — it never goes
+through this script. If a real gap shows up where XML truly can't answer a
+question, raise it rather than reintroducing screen capture here.
 
-Likewise, never pipe `source`'s output into a raw `grep` call (or redirect it to a file under `/tmp` to grep later) to find an element's coordinates — despite what earlier versions of this doc claimed, `grep` is **not** unconditionally auto-allowed in practice, and redirecting output to a file plus reading it back from outside the project root (`/tmp`) each need their own permission on top of that. Use the `find` subcommand above instead: it does the filtering internally (inside the already-allowlisted script) and prints just the `bounds="..."` you need, with nothing written outside the project and no separate `grep`/`Read` call required. `sleep <n>` by itself, with no piping, is genuinely auto-allowed and fine to use between steps.
+Never pipe `source`'s output into a raw `grep` call (or redirect it to a file under `/tmp` to grep later) to find an element's coordinates — despite what earlier versions of this doc claimed, `grep` is **not** unconditionally auto-allowed in practice, and redirecting output to a file plus reading it back from outside the project root (`/tmp`) each need their own permission on top of that. Use the `find` subcommand above instead: it does the filtering internally (inside the already-allowlisted script) and prints just the `bounds="..."` you need, with nothing written outside the project and no separate `grep`/`Read` call required. `sleep <n>` by itself, with no piping, is genuinely auto-allowed and fine to use between steps.
 
 Note: `noReset` means the app process and its state persist across sessions —
 reopening a session resumes wherever the app was left (e.g. mid-flow on some
@@ -101,17 +108,23 @@ without dying mid-flow — if `source`/`contains`/etc. ever comes back with
 "invalid session id", the session genuinely expired (or the app crashed/got
 killed) and needs `open-session` called again, not a sign anything else is
 wrong. Separately, `launch_environment.sh` disables the emulator's screen
-sleep timeout for the whole automation session, so the display shouldn't go
-dark (and `screenshot` shouldn't return a black frame) during normal gaps
-either — if the screen does still appear off, prefer `wake-screen` over
-diagnosing it as an app problem.
+sleep timeout for the whole automation session, so it shouldn't go to sleep
+mid-run either — if a tap stops registering and the screen appears off,
+prefer `wake-screen` over diagnosing it as an app problem.
 
 ## Finding tap coordinates
 
-Read the flow doc's screenshot (under `screenshots or figma Links/screens/`) to see roughly where an
-element sits, then confirm exact bounds with `find "<content-desc text>"` (elements are
-Jetpack Compose views identified mostly by `content-desc`, rarely
-`resource-id`) rather than reading the full `source` dump and grepping it yourself.
+Live coordinate resolution — turning a text selector into on-screen
+`bounds` — is `find "<content-desc text>"` against the current `source`
+(elements are Jetpack Compose views identified mostly by `content-desc`,
+rarely `resource-id`) rather than reading the full `source` dump and
+grepping it yourself. Under the compiled-plan architecture, `run-plan` does
+this resolution internally for every step in a plan — you only need to call
+`find` directly yourself during a `flow-runner` local-recovery pass (a real
+divergence) or ad-hoc exploration outside a plan. Where a selector's text
+actually comes from (what to type into `find`) is decided once, at compile
+time, by `flow-compiler` reading the flow doc's own documentation
+screenshots directly — never by this script.
 Compose can merge several UI elements into one large
 accessibility node — tap near where the element visually appears within that
 merged region, not just its center, and re-check `source`/`contains` after tapping to

@@ -1,5 +1,5 @@
 ---
-description: Author a new flow end-to-end from a screenshots folder — writes flow/<name>.md, immediately compiles it to execution-plans/, validates the result, and reports it ready for /run.
+description: Author a new flow end-to-end from a screenshots folder — writes flow/<name>.md, then drives it live against an already-running environment to build and validate execution-plans/, and reports it ready for /run.
 argument-hint: <screenshots-folder> ["precondition"] [--precondition "..."] [--notes "..."] [--title "..."] [--tags "a, b, c"]
 ---
 
@@ -8,13 +8,18 @@ argument-hint: <screenshots-folder> ["precondition"] [--precondition "..."] [--n
 Turns a folder of ordered screenshots into a fully working flow, in one shot:
 
 ```
-Screenshots  →  Flow doc (flow/<name>.md)  →  Compiled plan (execution-plans/<name>.*)  →  Ready for /run
+Screenshots  →  Flow doc (flow/<name>.md)  →  Live-driven, validated plan (execution-plans/<name>.*)  →  Ready for /run
 ```
 
-This command never drives the live app — it only writes documentation and a
-compiled plan, the same posture as the `flow-documenter` and `flow-compiler`
-agents it delegates to. It never modifies an existing flow doc; it only
-creates new ones.
+This command writes documentation (same posture as the `flow-documenter`
+agent it delegates to for step 4), then actually drives the new flow once
+against a live, already-running environment (delegating to `flow-runner`,
+the same agent `/run` uses) to compile and validate its execution plan —
+a plan built and proven against the real app the first time, rather than
+only guessed from screenshots, so it replays cleanly on every future `/run`
+without needing a first-run recovery pass. It requires an environment to
+already be running (see step 5) and never launches or tears one down itself.
+It never modifies an existing flow doc; it only creates new ones.
 
 ## 1. Parse arguments
 
@@ -130,32 +135,69 @@ Flow document generation failed: <reason>
 ```
 and stop — do not proceed to compilation.
 
-## 5. Compile the plan immediately (delegates to `flow-compiler`)
+## 5. Compile the plan by driving it live (delegates to `flow-runner`)
 
-Do not wait for a future `/run` to trigger this. Invoke the `flow-compiler`
-agent (foreground) on `flow/<flowName>.md`, exactly as it would compile any
-other flow doc — reading the doc + every screenshot once, deriving
-steps/actions/`screenMarker`/assertions, resolving `appPackage`/`appActivity`/
-`appVersion` from `.claude/skills/launchApplication/.last_install_state` (or
-`aapt` if needed), and calling
-`.claude/skills/compilePlan/scripts/plan_tool.sh write <flowName>`. This
-writes `execution-plans/<flowName>.plan.json` and
-`execution-plans/<flowName>.meta.json` — this repo's actual compiled-plan
-format (see `.claude/skills/compilePlan/SKILL.md`). No new file layout is
-introduced here.
+Do not wait for a future `/run` to trigger this, and do not build the plan
+by only re-reading the doc/screenshots — drive the newly-written flow live,
+once, so the plan that lands on disk is proven against the real app rather
+than guessed.
 
-If `flow-compiler` reports it could not resolve an app version (no APK ever
-installed) or any other blocking issue, report:
-```
-Execution plan compilation failed: <reason>
-```
-and stop — the flow doc from step 4 still exists on disk (don't delete it),
-but do not claim the flow is ready for `/run`.
+1. **Require a live environment.** Check for one the same way the rest of
+   this repo does (e.g. `.claude/skills/launchApplication/.last_install_state`
+   plus an actually-reachable Appium session — the same liveness check
+   `flow-runner`/`env-manager` already rely on). If nothing is running:
+   ```
+   No live environment found — /create_flow drives the new flow live to build a validated plan.
+   Launch one first (env-manager agent, or launchApplication's launch_environment.sh <apk>), then re-run /create_flow.
+   ```
+   Stop here. The flow doc from step 4 still exists on disk (don't delete
+   it), but do not claim the flow is ready for `/run`. `/create_flow` never
+   launches or swaps the environment itself — it only ever reuses one that's
+   already up, exactly like `flow-runner` does for `/run`.
+2. **Satisfy the doc's own Precondition first, live**, if it has one other
+   than `None` (e.g. a precondition that says to complete `flow/loginFlow.md`
+   first) — this is `flow-runner`'s Step 0 (see
+   `.claude/agents/flow-runner.md`): if the referenced flow doc already has
+   a valid compiled plan, run that plan (`run-plan`) rather than re-reading
+   its markdown; only compile it first if it doesn't have one yet. Never
+   re-derive or duplicate the referenced flow's steps into the new flow's
+   own plan.
+3. Invoke the `flow-runner` agent (foreground) to walk `flow/<flowName>.md`
+   live, step by step, **before** any plan.json/meta.json is written —
+   for a brand-new flow there is no prior plan to replay, so this is not
+   "guess a plan, then execute it, then patch what's wrong." Instead, for
+   each step in order: perform that step's action against the live app
+   (via `appium_action.sh` — `tap`/`type`/`scroll`/etc., driven off the
+   doc's description of what to do), then read the *actual* live UI state
+   (`source`/`find`/`contains`) to confirm the real `content-desc`/selector
+   text and to check the doc's assertions for that step actually hold. Only
+   once every step has been walked this way — so every action's selector
+   and every assertion has been confirmed against real, live accessibility
+   data, not inferred from a screenshot image — call
+   `.claude/skills/compilePlan/scripts/plan_tool.sh write <flowName>` a
+   single time with the now-verified steps (resolving `appPackage`/
+   `appActivity`/`appVersion` from
+   `.claude/skills/launchApplication/.last_install_state` or `aapt`). This
+   is what makes future `/run`s of this flow fast: `run-plan` replays
+   selectors that are already known-good from this live pass, instead of
+   discovering they're wrong on the first real run and needing a recovery
+   pass then. Do not have `flow-runner` touch environment lifecycle (no
+   launch/teardown) — that's out of scope for this command.
+4. Report back the per-step pass/fail `flow-runner` observed. If any step
+   still fails after local recovery (a genuine mismatch between the doc and
+   the live app, not just a one-time selector drift), that's a
+   compilation-blocking failure:
+   ```
+   Execution plan compilation failed: <reason — include which step(s) failed and why>
+   ```
+   Stop here — do not report the flow ready for `/run` with known-failing
+   steps. The doc and whatever plan state exists remain on disk for a human
+   to fix.
 
 ## 6. Validate the generated plan
 
-Once `flow-compiler` returns, cross-check its output before declaring
-success — this is a real check, not a formality:
+Once `flow-runner` returns from the live run, cross-check its output before
+declaring success — this is a real check, not a formality:
 
 1. Run `.claude/skills/compilePlan/scripts/plan_tool.sh check <flowName>`.
    Expect `PLAN_STATUS=HIT` (a plan that was just written should immediately
@@ -175,13 +217,17 @@ success — this is a real check, not a formality:
      is `null`, or an object/array of objects whose `type` is one of
      `tap`/`type`/`back`/`scroll`/`scroll-to`/`wait-for`/`wait-until-gone`/
      `double-tap`/`long-press`, with a `selector` present for any type that
-     needs one (i.e. everything except `back`).
+     needs one (i.e. everything except `back`/`scroll`, which act on the
+     whole screen rather than one element).
+   - **Every step actually passed live** — cross-check against `flow-runner`'s
+     step- pass/fail report from step 5.4: a structurally valid plan whose
+     live run still failed a step (even after recovery) is not a pass.
 3. If any of these checks fail, do not report success. Report exactly what
    failed (which step, which check) and stop — per this command's design,
-   silently producing an invalid plan is not acceptable. The doc and
-   whatever plan was written remain on disk for a human to fix (re-run
-   `/create_flow`'s compile step manually via the `flow-compiler` agent, or
-   correct the doc/screenshots and recompile) rather than being deleted.
+   silently producing an invalid or unproven plan is not acceptable. The doc
+   and whatever plan was written remain on disk for a human to fix (re-run
+   `/create_flow`'s live-drive step manually via the `flow-runner` agent, or
+   correct the doc/screenshots and re-drive) rather than being deleted.
 
 ## 7. Success output
 
@@ -209,8 +255,12 @@ No manual steps should remain before `/run <flowName> <apk>` works.
 - Metadata (flow name, doc hash, screenshot hashes, generated timestamp,
   schema version) is exactly what `execution-plans/<flowName>.meta.json`
   already stores via `plan_tool.sh write` — no second metadata file or log
-  file is created; the chat output above (and `flow-compiler`'s own
+  file is created; the chat output above (and `flow-runner`'s own
   report-back) serves that purpose.
 - This command only ever creates `flow/<flowName>.md` — it never edits an
-  existing doc, never touches `tests/**`, never changes `/run`'s or
-  `/list_flow`'s behavior, and never drives the live app.
+  existing doc, never touches `tests/**`, and never changes `/list_flow`'s
+  behavior.
+- This command drives the live app exactly once, during step 5, to compile
+  and validate the plan — it requires a pre-existing running environment and
+  never launches, swaps, or tears one down itself (that stays entirely
+  `/run`'s and `env-manager`'s job).

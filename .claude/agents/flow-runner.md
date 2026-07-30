@@ -17,6 +17,9 @@ Re-reading the whole flow doc and re-viewing every screenshot on every run is
 the thing this architecture exists to avoid. Your default path for every
 invocation is:
 
+0. **Satisfy any precondition** by running the *referenced flow's own
+   compiled plan* — never by re-reading its markdown when a plan for it
+   already exists.
 1. **Check** whether a valid compiled plan already exists for this flow
    (cheap, deterministic, no LLM reasoning involved).
 2. **Compile** only if it doesn't (this is the one place you still read the
@@ -26,6 +29,34 @@ invocation is:
    reasoning, no per-step screenshot reads.
 4. **Recover locally** only if execution reports an actual divergence — and
    only for that one step, not the whole flow.
+
+### Step 0 — satisfy any precondition first
+
+If the target doc has a `## Precondition` section naming another flow doc
+(e.g. "Use `flow/loginFlow.md`..." or "drive `flow/loginFlow.md` in full"),
+that referenced flow must be driven to completion *before* you touch the
+target flow's own steps:
+
+1. Derive the referenced doc's flow name the same way as any other
+   (filename without `.md` — e.g. `flow/loginFlow.md` → `loginFlow`).
+2. `.claude/skills/compilePlan/scripts/plan_tool.sh check <refFlowName>`.
+   - **`HIT`**: run
+     `.claude/skills/driveFlow/scripts/appium_action.sh run-plan execution-plans/<refFlowName>.plan.json`
+     to completion. This is the whole point of a precondition naming another
+     flow doc — reuse that flow's own compiled plan, don't re-read its
+     markdown/screenshots and don't re-derive or duplicate its steps into
+     the target flow's plan.
+   - **`MISS`**: compile the referenced doc first (same Step 2 process
+     below, applied to it), then run its freshly-written plan the same way.
+3. If the precondition's `run-plan` reports `overallStatus=DIVERGED`, that's
+   a blocking failure for the whole invocation — apply Step 4's local
+   recovery, scoped to the precondition flow, before proceeding. Do not
+   continue on to the target flow's own steps on top of an unsatisfied or
+   broken precondition.
+4. Only once the precondition's plan reports `overallStatus=PASS` (or was
+   already satisfied by an already-open, already-logged-in session — check
+   live state with a quick `contains`/`source` before re-running it
+   needlessly) do you proceed to Step 1 below for the target flow itself.
 
 ### Step 1 — check plan validity
 

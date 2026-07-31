@@ -11,6 +11,19 @@ that's `env-manager`'s job; assume the environment is already up (if
 `open-session`/`run-plan` fails because no emulator is detected, say so and
 stop rather than trying to boot one yourself).
 
+If your caller (e.g. `/run`) gives you a resolved `environment`
+(`Staging`/`Production`), `testUser` name, and/or literal `mobile`/
+`password` values, thread all of them through as `--environment
+<environment>`/`--test-user <testUser>`/`--mobile <mobile>`/`--password
+<password>` on **every** `run-plan` call you make below (Step 0's
+precondition run, Step 3's main execution, Step 4's resumed `--from-step`
+call) — this is how a plan's `${mobileNumber}`/`${password}`/`${userCode}`
+tokens (see `compilePlan` SKILL.md's "Credential tokens" section) get
+resolved, either against the right `test-data/<environment>.properties`
+entry or directly from the literal values your caller gave you. Omit
+whichever of these flags weren't given to you and let `appium_action.sh`
+apply its own defaults/fallbacks.
+
 ## The model: compile once, replay deterministically, recover locally
 
 Re-reading the whole flow doc and re-viewing every screenshot on every run is
@@ -42,10 +55,11 @@ target flow's own steps:
 2. `.claude/skills/compilePlan/scripts/plan_tool.sh check <refFlowName>`.
    - **`HIT`**: run
      `.claude/skills/driveFlow/scripts/appium_action.sh run-plan execution-plans/<refFlowName>.plan.json`
-     to completion. This is the whole point of a precondition naming another
-     flow doc — reuse that flow's own compiled plan, don't re-read its
-     markdown/screenshots and don't re-derive or duplicate its steps into
-     the target flow's plan.
+     (plus `--environment`/`--test-user`/`--mobile`/`--password` if you were
+     given them) to completion. This is the whole point of a precondition
+     naming another flow doc — reuse that flow's own compiled plan, don't
+     re-read its markdown/screenshots and don't re-derive or duplicate its
+     steps into the target flow's plan.
    - **`MISS`**: compile the referenced doc first (same Step 2 process
      below, applied to it), then run its freshly-written plan the same way.
 3. If the precondition's `run-plan` reports `overallStatus=DIVERGED`, that's
@@ -87,8 +101,11 @@ just produced.
 
 ```
 .claude/skills/generateReport/scripts/report_tool.sh start
-.claude/skills/driveFlow/scripts/appium_action.sh run-plan execution-plans/<flowName>.plan.json
+.claude/skills/driveFlow/scripts/appium_action.sh run-plan execution-plans/<flowName>.plan.json --environment <environment> --test-user <testUser> --mobile <mobile> --password <password>
 ```
+
+(omit whichever of `--environment`/`--test-user`/`--mobile`/`--password`
+your caller didn't give you)
 
 This one call drives every step in the plan (opening a session if needed,
 tapping/typing/scrolling/waiting, checking each step's `screenMarker` and
@@ -129,8 +146,9 @@ that way, not as a reason to re-reason about the whole flow:
    ```
    Then resume the deterministic path from the next step:
    ```
-   .claude/skills/driveFlow/scripts/appium_action.sh run-plan execution-plans/<flowName>.plan.json --from-step <stepId+1>
+   .claude/skills/driveFlow/scripts/appium_action.sh run-plan execution-plans/<flowName>.plan.json --from-step <stepId+1> --environment <environment> --test-user <testUser> --mobile <mobile> --password <password>
    ```
+   (same flag-omission rule as Step 3 above)
    Repeat Step 4 if that resumed run diverges again at a later step.
 5. If you cannot find a working fix after a reasonable attempt (a couple of
    tries), stop — report that step as **FAIL** with the real reason, and
@@ -191,7 +209,7 @@ format needs to change for any of this to work.
 .claude/skills/driveFlow/scripts/appium_action.sh find "some text"
 .claude/skills/driveFlow/scripts/appium_action.sh wait-for "some text" [timeoutSeconds]
 .claude/skills/driveFlow/scripts/appium_action.sh wait-until-gone "some text" [timeoutSeconds]
-.claude/skills/driveFlow/scripts/appium_action.sh run-plan <plan.json> [--from-step N]
+.claude/skills/driveFlow/scripts/appium_action.sh run-plan <plan.json> [--from-step N] [--environment <Staging|Production>] [--test-user <name>] [--mobile <number>] [--password <pass>]
 .claude/skills/driveFlow/scripts/appium_action.sh close-session
 ```
 

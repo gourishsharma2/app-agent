@@ -188,6 +188,44 @@ Field notes:
   for a one-line hint to a future recovery pass (e.g. "content-desc merges
   with the balance label — tap left third of the bounds").
 
+## Credential tokens
+
+A step's `action.text`, `action.selector`, `screenMarker`, `assertions[]`,
+or `waitFor.text` may contain `${mobileNumber}`, `${password}`, or
+`${userCode}` instead of a literal value, wherever that value is really a
+login credential (a phone number, password, or user code) rather than
+fixed on-screen copy. For example, instead of hardcoding one specific phone
+number into every place it appears in a step, write:
+
+```json
+{ "type": "type", "text": "${mobileNumber}" }
+```
+
+```json
+"assertions": ["Enter the OTP sent to ${mobileNumber}"]
+```
+
+These tokens are pure stored text as far as `plan_tool.sh` is concerned —
+`check`/`write`/`patch` never interpret or substitute them, exactly like any
+other string in the plan. Substitution happens only at execution time,
+inside `run_plan.py` (`appium_action.sh run-plan`'s executor): it resolves
+`${mobileNumber}`/`${password}`/`${userCode}` by reading
+`test-data/<environment>.properties` (environment from `run-plan`'s
+`--environment` flag, default `Production`) and looking up either the named
+test user (`--test-user <name>`) or, if that flag is omitted, a `default`
+entry in that same file (if the file has one — see
+`test-data/production.properties`/`test-data/staging.properties`). This is
+what lets one compiled plan drive the login flow as any test user in either
+environment without ever being recompiled — only `flow-compiler` writing the
+token in the first place, and `run-plan` substituting it later, are aware
+credentials are involved at all.
+
+`run-plan` also accepts `--mobile <number>`/`--password <pass>`/`--user-code
+<code>` to supply a value directly instead of looking it up from a
+test-data file — each given flag overrides just that one field; if both
+`--mobile` and `--password` are given, no test-data file is consulted at
+all, so a genuinely ad-hoc credential doesn't need a file entry first.
+
 ## Scope
 
 This skill never drives the live app and never decides *what* a plan should

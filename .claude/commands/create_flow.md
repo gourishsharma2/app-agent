@@ -1,6 +1,6 @@
 ---
 description: Author a new flow end-to-end from a screenshots folder — writes flow/<name>.md, then drives it live against an already-running environment to build and validate execution-plans/, and reports it ready for /run.
-argument-hint: <screenshots-folder> ["precondition"] [--precondition "..."] [--notes "..."] [--title "..."] [--tags "a, b, c"]
+argument-hint: <screenshots-folder> ["precondition"] [--precondition "..."] [--steps "1. ... 2. ..."] [--notes "..."] [--title "..."] [--tags "a, b, c"]
 ---
 
 # Create a new flow
@@ -37,17 +37,26 @@ It never modifies an existing flow doc; it only creates new ones.
    The screenshots folder is mandatory.
    ```
 2. **Everything after the first token** is optional. Parse it as:
-   - If it starts with `--`, parse `--precondition "..."`, `--notes "..."`,
-     `--title "..."`, `--tags "a, b, c"` (accept comma- or space-separated
-     tags either way). Any combination/order is fine; unrecognized flags are
-     a hard error — report which flag wasn't understood and stop.
+   - If it starts with `--`, parse `--precondition "..."`, `--steps "..."`,
+     `--notes "..."`, `--title "..."`, `--tags "a, b, c"` (accept comma- or
+     space-separated tags either way). Any combination/order is fine;
+     unrecognized flags are a hard error — report which flag wasn't
+     understood and stop.
+   - Otherwise, if the trailing text is a **multi-point numbered narrative**
+     (two or more segments matching `<number>. ...`, e.g. "1. ... 2. ...") —
+     even with no `--` flag in front of it — treat it as shorthand for
+     `--steps`, not `--precondition`. This is the user dictating the flow's
+     actual steps/actions/assertions in prose; a precondition is a short
+     one-line phrase, never a numbered walkthrough. See "Handling `steps`"
+     under step 4 below for how this changes the rest of the command.
    - Otherwise, if there's a single bare quoted (or unquoted) string with no
      `--` flags at all, treat it as shorthand for `--precondition` (matches
      the second usage example in the spec).
    - If nothing follows the first token, all optional fields are unset.
-3. Defaults: `precondition` → `"None"` if unset. `notes` → unset (omit the
-   section entirely). `title` → unset (derived in step 3 below). `tags` →
-   unset (omit the tags line entirely).
+3. Defaults: `precondition` → `"None"` if unset. `steps` → unset (falls back
+   to pure screenshot-driven authoring, see step 4). `notes` → unset (omit
+   the section entirely). `title` → unset (derived in step 3 below). `tags`
+   → unset (omit the tags line entirely).
 
 ## 2. Validate the screenshots folder
 
@@ -125,7 +134,40 @@ result) with the target path and every screenshot discovered in step 2, plus:
 - If `tags` was supplied: add one line directly under the `# <Flow Name>`
   heading: `**Tags:** tag1, tag2, ...`.
 - Never invent on-screen text, steps, or elements beyond what's visible in
-  the screenshots — same hard rule the agent already follows.
+  the screenshots — same hard rule the agent already follows. This default
+  changes when `steps` was supplied — see immediately below.
+
+**Handling `steps` (a user-supplied narrative takes priority over screenshot content):**
+If `steps` was supplied, it — not the screenshots — is the source of truth
+for which steps exist and what each step's actions/assertions are. Tell
+`flow-documenter` explicitly:
+- Write one `## Step N` section per point in the narrative (not one per
+  screenshot file — the two counts do not need to match; a narrative often
+  describes transient states, like a validation error, that no screenshot
+  captures).
+- Screenshots are now visual reference only, used solely to confirm layout
+  and element naming where a narrative step's resulting screen happens to
+  line up with one — reference that screenshot on that step. Do not pull
+  on-screen text/content from a screenshot to add or override anything the
+  narrative didn't say, and do not drop a narrative step just because no
+  screenshot shows that state.
+- Do not hardcode incidental dynamic values that only happen to appear in a
+  screenshot (a specific test phone number, a specific balance figure, etc.)
+  unless the narrative itself specified that literal value — refer to it
+  generically instead (e.g. "the entered phone number").
+- Any assertion text that comes only from the narrative and isn't
+  independently confirmed by a screenshot (e.g. exact error-message
+  wording for a state no screenshot shows) must be marked provisional
+  inline in that step, noting it will be verified/corrected against the
+  live app during step 5's live compile pass — never presented as
+  screenshot-confirmed text it isn't.
+- The existing "never invent on-screen text" hard rule still applies to
+  content *not* covered by the narrative — `flow-documenter` shouldn't
+  embellish beyond what the user described or what a screenshot shows.
+
+If `steps` was not supplied, fall back to the original behavior: derive
+steps/actions/assertions purely from the screenshots, one `## Step N` per
+screenshot file, exactly as documented above.
 
 Wait for it to finish and confirm the file was written to `flow/<flowName>.md`
 before continuing. If it reports it couldn't produce a doc (e.g. an

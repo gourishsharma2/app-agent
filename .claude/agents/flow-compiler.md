@@ -23,10 +23,21 @@ expects. Do not deviate from it or invent extra top-level fields.
 ## Process
 
 1. **Read the target doc** (e.g. `flow/loginFlow.md`, `tests/VerifyGpsListing.md`).
-   If it's a `tests/*.md` doc with a `## Precondition` section referencing
-   another flow doc (e.g. "drive `flow/loginFlow.md` in full"), read that
-   referenced doc too — its steps are part of what you're compiling, and its
-   hash needs to be tracked so editing it invalidates this plan as well.
+   If it has a `## Precondition` section that names another flow doc (e.g.
+   "Use `flow/loginFlow.md`..." or "drive `flow/loginFlow.md` in full"),
+   **do not read that referenced doc's content or merge its steps into this
+   plan.** A precondition is satisfied at execution time by running the
+   referenced flow's *own* compiled plan first (`flow-runner`'s job — see
+   its "Precondition" step) — never by duplicating that flow's steps into
+   every plan that depends on it. This plan's own `steps` start from
+   whatever screen/state the precondition leaves the app in (e.g. this
+   doc's own Step 1 is the first action *after* login, not login itself).
+   Still list the referenced doc's path in the `docs` array you pass to
+   `plan_tool.sh write` (alongside the target doc) purely so its hash gets
+   tracked — editing that referenced doc should invalidate this plan too,
+   since this plan's steps assume a specific state that doc produces — but
+   that only needs the file's path, not you reading or understanding its
+   content.
 2. **Read every screenshot** the doc(s) reference, in step order, with the
    `Read` tool (it can view images directly) — same screenshots
    `flow-documenter` would have used to write the doc in the first place.

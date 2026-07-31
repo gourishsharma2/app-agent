@@ -16,12 +16,14 @@
       "Bash(aapt dump *)",
       "Skill(run)",
       "Skill(list_flow)",
+      "Skill(create_flow)",
       "Skill(launchApplication)",
       "Skill(driveFlow)",
       "Skill(generateReport)",
       "Skill(compilePlan)",
       "Agent(flow-runner)",
       "Agent(flow-compiler)",
+      "Agent(flow-documenter)",
       "Agent(report-writer)"
     ]
   }

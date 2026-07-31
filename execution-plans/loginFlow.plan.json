@@ -1,0 +1,170 @@
+{
+  "schemaVersion": 1,
+  "flowName": "loginFlow",
+  "sourceDoc": "flow/loginFlow.md",
+  "referencedDocs": [],
+  "appPackage": "com.wheelseyeoperator.debug",
+  "appActivity": ".ui.launch.LaunchActivity",
+  "steps": [
+    {
+      "id": 1,
+      "title": "Login screen \u2014 initial state",
+      "screenMarker": "Login to your account",
+      "action": null,
+      "assertions": [
+        "Login to your account",
+        "Phone number",
+        "Send OTP",
+        "Continue with password",
+        "I agree to receive updates via WhatsApp, SMS, and calls.",
+        "Signup",
+        "terms &amp; conditions"
+      ],
+      "knownNonBug": false,
+      "retries": 1,
+      "notes": "Live-verified corrections: 'WheelsEye' wordmark is a plain logo image (ImageView) with no content-desc/text in the accessibility tree \u2014 omitted, it does not hold via a live contains check even though it renders as text in the screenshot. 'terms & conditions' is written with the XML-escaped ampersand (&amp;) because contains/assert-all do a literal substring match against the raw XML source, where a real on-screen '&' is always serialized as '&amp;'."
+    },
+    {
+      "id": 2,
+      "title": "Send OTP with empty phone number \u2014 validation error",
+      "screenMarker": "Please enter the details",
+      "action": {
+        "type": "tap",
+        "selector": "Send OTP"
+      },
+      "assertions": [
+        "Phone number",
+        "Please enter the details"
+      ],
+      "knownNonBug": false,
+      "retries": 1,
+      "notes": "Doc's provisional error text 'Please enter the details' confirmed exact live; no separate distinct field-level error text exists beyond the field label."
+    },
+    {
+      "id": 3,
+      "title": "Enter phone number, send OTP \u2014 OTP screen",
+      "screenMarker": "Verify your phone number",
+      "action": [
+        {
+          "type": "tap",
+          "selector": "+91"
+        },
+        {
+          "type": "type",
+          "text": "${mobileNumber}"
+        },
+        {
+          "type": "tap",
+          "selector": "Send OTP"
+        }
+      ],
+      "assertions": [
+        "Call us",
+        "Verify your phone number",
+        "Enter the OTP sent to ${mobileNumber}",
+        "Login",
+        "Didn\u2019t receive OTP?"
+      ],
+      "knownNonBug": false,
+      "retries": 1,
+      "notes": "The phone-number EditText itself has no content-desc/text, so the '+91' country-code prefix badge (clickable=false, fully inside the EditText's bounds) is used as the tap selector to focus it before typing. Live-verified correction: 'Didn't receive OTP?' uses a curly right single quote (U+2019 \u2019), not a straight apostrophe as the doc originally had."
+    },
+    {
+      "id": 4,
+      "title": "Incorrect OTP entered \u2014 error",
+      "screenMarker": "Please enter the correct OTP",
+      "action": [
+        {
+          "type": "type",
+          "text": "1234"
+        },
+        {
+          "type": "tap",
+          "selector": "Login"
+        }
+      ],
+      "assertions": [
+        "Please enter the correct OTP"
+      ],
+      "knownNonBug": false,
+      "retries": 1,
+      "notes": "OTP entry field is auto-focused as soon as the OTP screen loads, so no tap is needed before typing. Live-verified correction: actual error text is 'Please enter the correct OTP' \u2014 the doc's provisional guess ('Please enter correct OTP') was missing 'the'."
+    },
+    {
+      "id": 5,
+      "title": "Back to login, open password screen",
+      "screenMarker": "Password",
+      "action": [
+        {
+          "type": "back"
+        },
+        {
+          "type": "tap",
+          "selector": "Continue with password"
+        }
+      ],
+      "assertions": [
+        "Phone number",
+        "Password",
+        "Login",
+        "Create new password"
+      ],
+      "knownNonBug": false,
+      "retries": 1,
+      "notes": "'back' from the OTP screen returns to the login screen (phone number field retains its value); 'Continue with password' opens the password screen with phone number pre-filled and the password field auto-focused/empty."
+    },
+    {
+      "id": 6,
+      "title": "Incorrect password entered \u2014 error",
+      "screenMarker": "Incorrect UserName or Password",
+      "action": [
+        {
+          "type": "type",
+          "text": "qwerty"
+        },
+        {
+          "type": "tap",
+          "selector": "Login"
+        }
+      ],
+      "assertions": [
+        "Incorrect UserName or Password"
+      ],
+      "knownNonBug": false,
+      "retries": 1,
+      "notes": "Password field is auto-focused/empty on screen landing, no tap needed. Live-verified correction: actual error text is 'Incorrect UserName or Password' (shown under both the phone number and password labels) \u2014 the doc's provisional guess ('Please enter the details') did not match."
+    },
+    {
+      "id": 7,
+      "title": "Correct password \u2014 successful login, Home page",
+      "screenMarker": "FasTag",
+      "action": [
+        {
+          "type": "back"
+        },
+        {
+          "type": "tap",
+          "selector": "Continue with password"
+        },
+        {
+          "type": "type",
+          "text": "${password}"
+        },
+        {
+          "type": "tap",
+          "selector": "Login"
+        }
+      ],
+      "assertions": [
+        "FasTag",
+        "Vehicles",
+        "Diesel",
+        "Loads",
+        "Home"
+      ],
+      "knownNonBug": false,
+      "retries": 1,
+      "notes": "Re-opens a fresh password screen (phone pre-filled, password field empty & auto-focused) instead of clearing the previous incorrect password in place, avoiding any need for a selector on the unlabeled password EditText. Live-verified correction: the Loads tab's underlying content-desc is 'Loads' (title case) even though it renders visually as all-caps 'LOADS' via text-transform styling \u2014 the doc's 'LOADS' does not match the live accessibility tree. The post-login 'Unauthenticated App Detected' dialog and notification-permission prompt (see application/known-behaviors.md) did not appear during this compile pass (likely already dismissed/granted earlier in this emulator session) so no dismiss actions were added; a future run hitting them fresh will diverge and can be locally recovered/patched then."
+    }
+  ]
+}

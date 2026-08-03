@@ -9,8 +9,8 @@
   "steps": [
     {
       "id": 1,
-      "title": "Vehicles tab \u2014 chips display",
-      "screenMarker": "Your vehicles",
+      "title": "Vehicles tab \u2014 chips and filter",
+      "screenMarker": "Vehicles",
       "action": [
         {
           "type": "tap",
@@ -24,19 +24,8 @@
         "Stopped"
       ],
       "knownNonBug": false,
-      "retries": 1
-    },
-    {
-      "id": 2,
-      "title": "Filter icon \u2014 Offline option",
-      "screenMarker": "Offline",
-      "action": null,
-      "assertions": [
-        "Offline"
-      ],
-      "knownNonBug": false,
       "retries": 1,
-      "notes": "Live-confirmed real behavior (filter panel shows an 'Offline (N)' checkbox option; the same tap target opens and closes it), but not currently automatable: the funnel icon has no content-desc/text of its own \u2014 it's merged into its parent row's accessibility node, whose merged bounds-center overlaps the 'Stopped' chip rather than the icon itself. run_plan.py's tap action only supports text-selector resolution, no coordinate fallback, so action is intentionally null pending a coordinate-tap capability addition to the shared script."
+      "notes": "Vehicles tab is next to FasTag in the Home page tab row. Numeric counts on the All/Running/Stopped chips are dynamic fleet data (e.g. All (94), Running (1), Stopped (3) at authoring time) \u2014 assertions match the chip label prefix only, per flow/gpsListingFlow.md Step 1."
     }
   ],
   "schemaVersion": 1

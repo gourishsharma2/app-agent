@@ -40,18 +40,20 @@
       "assertions": [
         "Phone number",
         "Password",
-        "Login",
-        "Create new password"
+        "Login"
       ],
       "knownNonBug": false,
       "retries": 1,
-      "notes": "Phone-number EditText has no content-desc/text of its own (per loginFlow.plan.json step 3), so the '+91' country-code badge is used as the tap selector to focus it before typing, matching the previously-verified loginFlow pattern. Entering the number before tapping 'Continue with password' is what pre-fills the phone-number field shown on the resulting password screen."
+      "notes": "Phone-number EditText has no content-desc/text of its own, so the '+91' country-code badge is used as the tap selector to focus it before typing. Entering the number before tapping 'Continue with password' is what pre-fills the phone-number field shown on the resulting password screen. Step 2 assertions no longer include 'Create new password' per current flow/userLogin.md (removed from doc)."
     },
     {
       "id": 3,
       "title": "Successful login \u2014 Home page",
       "screenMarker": "FasTag",
       "action": [
+        {
+          "type": "back"
+        },
         {
           "type": "back"
         },
@@ -66,6 +68,11 @@
         {
           "type": "tap",
           "selector": "Login"
+        },
+        {
+          "type": "wait-for",
+          "text": "FasTag",
+          "timeoutSeconds": 25
         }
       ],
       "assertions": [
@@ -73,7 +80,7 @@
       ],
       "knownNonBug": false,
       "retries": 1,
-      "notes": "Per flow/userLogin.md Step 3: 'user re-opens the password screen (back \u2192 Continue with password)' before entering the correct password \u2014 back returns to the login screen with the phone number retained, then re-tapping Continue with password re-opens a fresh password screen with an empty, auto-focused password field, matching the identical pattern already verified live in loginFlow.plan.json step 7. Post-login 'Unauthenticated App Detected'/notification-permission prompts (application/known-behaviors.md) are known non-blocking quirks, not asserted here."
+      "notes": "Per flow/userLogin.md Step 3: 'user re-opens the password screen (back \u2192 Continue with password)' before entering the correct password. Live behavior requires TWO back presses here, not one: the password screen auto-focuses its (empty) password field with the keyboard shown, so the first back press only dismisses the keyboard (confirmed live: after 1 back, still on the password screen, password field empty+focused); the second back press is what actually navigates to the login screen, after which 'Continue with password' re-opens a fresh password screen with an empty, auto-focused password field. Added an explicit 'wait-for FasTag' (25s) action after tapping Login: confirmed live against Production that a genuine successful login can take longer than the built-in 10s screenMarker poll to actually navigate to Home (observed a transient 'Incorrect UserName or Password' label still present in the accessibility tree ~10s after tap, with Home/FasTag fully loaded moments later on manual recheck) \u2014 this explicit wait removes that false divergence without weakening the assertion itself. Post-login 'Unauthenticated App Detected'/notification-permission prompts (application/known-behaviors.md) are known non-blocking quirks, not asserted here."
     }
   ],
   "schemaVersion": 1

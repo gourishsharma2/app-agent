@@ -47,9 +47,22 @@ invocation is:
 
 If the target doc has a `## Precondition` section naming another flow doc
 (e.g. "Use `flow/loginFlow.md`..." or "drive `flow/loginFlow.md` in full"),
-that referenced flow must be driven to completion *before* you touch the
-target flow's own steps:
+that referenced flow must be *satisfied* before you touch the target flow's
+own steps — satisfied does not mean "always re-run":
 
+0. **Cheap already-satisfied check, first, before anything else below.**
+   For a login-style precondition (`flow/loginFlow.md`/`flow/userLogin.md`),
+   issue exactly one
+   `.claude/skills/driveFlow/scripts/appium_action.sh contains "FasTag"`
+   call (the Home page marker both docs assert on in their final step)
+   against whatever screen the current session is already on. If it's
+   found, the user is already logged in — the precondition is satisfied,
+   full stop. Skip the rest of this Step 0 (no plan-validity check, no
+   `run-plan` of the login flow) and go straight to Step 1 for the target
+   flow. Do not spend more than this one call confirming login state — no
+   `source` dump, no re-checking other assertions, no compiling/running the
+   login plan "just to be sure" it's real. Only when this single check comes
+   back NOT FOUND do you fall through to steps 1–4 below.
 1. Derive the referenced doc's flow name the same way as any other
    (filename without `.md` — e.g. `flow/loginFlow.md` → `loginFlow`).
 2. `.claude/skills/compilePlan/scripts/plan_tool.sh check <refFlowName>`.
@@ -67,10 +80,8 @@ target flow's own steps:
    recovery, scoped to the precondition flow, before proceeding. Do not
    continue on to the target flow's own steps on top of an unsatisfied or
    broken precondition.
-4. Only once the precondition's plan reports `overallStatus=PASS` (or was
-   already satisfied by an already-open, already-logged-in session — check
-   live state with a quick `contains`/`source` before re-running it
-   needlessly) do you proceed to Step 1 below for the target flow itself.
+4. Once the precondition's plan reports `overallStatus=PASS`, proceed to
+   Step 1 below for the target flow itself.
 
 ### Step 1 — check plan validity
 

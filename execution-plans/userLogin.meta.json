@@ -1,13 +1,14 @@
 {
   "schemaVersion": 1,
-  "planVersion": 1,
+  "planVersion": 5,
   "docHashes": {
-    "flow/userLogin.md": "sha256:2ff8238caf9df895a3e9b170931b2a6166a0d490918a6ed5f72a84b09e98ba51"
+    "flow/userLogin.md": "sha256:0b206d1153b2c28f75dc36ef7cc33330c6f76af6fdd111944b6bd186bd89a6cb"
   },
   "screenshotHashes": {
     "screenshots or figma Links/loginFlow/Step 1.png": "sha256:4247c7310c5b97ab57cfd4e9e3e7d13fe86aa06de22bf819b8806357a5f35fde",
-    "screenshots or figma Links/loginFlow/Step 4.png": "sha256:0238f1af447aa8df848887e7e8286d690ed396c5fe964d125da6292bf054cfe3"
+    "screenshots or figma Links/loginFlow/Step 4.png": "sha256:0238f1af447aa8df848887e7e8286d690ed396c5fe964d125da6292bf054cfe3",
+    "screenshots or figma Links/loginFlow/Step 6.png": "sha256:0f099ef4af74ef314ae26e7ad8b6e310a10d3cc17b1d4cbfc1197667ab2ba138"
   },
   "appVersion": "com.wheelseyeoperator.debug@24.1.0(242410)",
-  "generatedAt": "2026-08-03T06:00:16Z"
+  "generatedAt": "2026-08-03T07:54:34Z"
 }

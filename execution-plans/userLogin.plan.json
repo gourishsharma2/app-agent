@@ -1,0 +1,80 @@
+{
+  "flowName": "userLogin",
+  "sourceDoc": "flow/userLogin.md",
+  "referencedDocs": [],
+  "appPackage": "com.wheelseyeoperator.debug",
+  "appActivity": ".ui.launch.LaunchActivity",
+  "steps": [
+    {
+      "id": 1,
+      "title": "Login screen \u2014 initial state",
+      "screenMarker": "Phone number",
+      "action": null,
+      "assertions": [
+        "Phone number",
+        "Send OTP",
+        "Continue with password"
+      ],
+      "knownNonBug": false,
+      "retries": 1,
+      "notes": "Assertion-only step confirming the initial login screen state, per flow/userLogin.md Step 1."
+    },
+    {
+      "id": 2,
+      "title": "Continue with password \u2014 password screen",
+      "screenMarker": "Password",
+      "action": [
+        {
+          "type": "tap",
+          "selector": "+91"
+        },
+        {
+          "type": "type",
+          "text": "${mobileNumber}"
+        },
+        {
+          "type": "tap",
+          "selector": "Continue with password"
+        }
+      ],
+      "assertions": [
+        "Phone number",
+        "Password",
+        "Login",
+        "Create new password"
+      ],
+      "knownNonBug": false,
+      "retries": 1,
+      "notes": "Phone-number EditText has no content-desc/text of its own (per loginFlow.plan.json step 3), so the '+91' country-code badge is used as the tap selector to focus it before typing, matching the previously-verified loginFlow pattern. Entering the number before tapping 'Continue with password' is what pre-fills the phone-number field shown on the resulting password screen."
+    },
+    {
+      "id": 3,
+      "title": "Successful login \u2014 Home page",
+      "screenMarker": "FasTag",
+      "action": [
+        {
+          "type": "back"
+        },
+        {
+          "type": "tap",
+          "selector": "Continue with password"
+        },
+        {
+          "type": "type",
+          "text": "${password}"
+        },
+        {
+          "type": "tap",
+          "selector": "Login"
+        }
+      ],
+      "assertions": [
+        "FasTag"
+      ],
+      "knownNonBug": false,
+      "retries": 1,
+      "notes": "Per flow/userLogin.md Step 3: 'user re-opens the password screen (back \u2192 Continue with password)' before entering the correct password \u2014 back returns to the login screen with the phone number retained, then re-tapping Continue with password re-opens a fresh password screen with an empty, auto-focused password field, matching the identical pattern already verified live in loginFlow.plan.json step 7. Post-login 'Unauthenticated App Detected'/notification-permission prompts (application/known-behaviors.md) are known non-blocking quirks, not asserted here."
+    }
+  ],
+  "schemaVersion": 1
+}

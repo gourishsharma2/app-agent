@@ -14,8 +14,14 @@ outcome without re-deriving it, and leaves the Appium session open on exit
 (divergence or clean finish) so a recovery pass or a `close-session` call can
 still use it.
 
+Before executing, `${mobileNumber}`/`${password}`/`${userCode}` tokens
+anywhere in the plan's strings are substituted with values resolved by
+`appium_action.sh` from `test-data/<environment>.properties` — this is what
+lets one compiled plan serve every test user/environment without
+recompiling.
+
 Not meant to be invoked directly — always via:
-    appium_action.sh run-plan <plan.json> [--from-step N]
+    appium_action.sh run-plan <plan.json> [--from-step N] [--environment <Staging|Production>] [--test-user <name>]
 """
 import json
 import re
@@ -211,6 +217,22 @@ class PlanExecutor:
         raise Divergence("scroll-not-found", selector)
 
 
+def substitute_credentials(obj, creds):
+    """Recursively replaces ${mobileNumber}/${password}/${userCode} tokens
+    (see .claude/skills/compilePlan/SKILL.md) in every string leaf of a
+    plan's dict/list tree with resolved values, so one compiled plan works
+    for every test user/environment without recompiling."""
+    if isinstance(obj, str):
+        for key, val in creds.items():
+            obj = obj.replace("${" + key + "}", val)
+        return obj
+    if isinstance(obj, list):
+        return [substitute_credentials(item, creds) for item in obj]
+    if isinstance(obj, dict):
+        return {k: substitute_credentials(v, creds) for k, v in obj.items()}
+    return obj
+
+
 def check_assertions(page, assertions):
     return [{"text": a, "found": a in page} for a in assertions]
 
@@ -307,11 +329,17 @@ def open_session(appium_url, device_serial, app_package, app_activity):
 
 
 def main():
-    plan_path, from_step_str, appium_url, state_file, device_serial = sys.argv[1:6]
+    (plan_path, from_step_str, appium_url, state_file, device_serial,
+     mobile_number, password, user_code) = sys.argv[1:9]
     from_step = int(from_step_str)
 
     with open(plan_path) as f:
         plan = json.load(f)
+    plan = substitute_credentials(plan, {
+        "mobileNumber": mobile_number,
+        "password": password,
+        "userCode": user_code,
+    })
 
     try:
         with open(state_file) as f:

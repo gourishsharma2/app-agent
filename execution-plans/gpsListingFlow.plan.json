@@ -1,0 +1,43 @@
+{
+  "flowName": "gpsListingFlow",
+  "sourceDoc": "flow/gpsListingFlow.md",
+  "referencedDocs": [
+    "flow/userLogin.md"
+  ],
+  "appPackage": "com.wheelseyeoperator.debug",
+  "appActivity": ".ui.launch.LaunchActivity",
+  "steps": [
+    {
+      "id": 1,
+      "title": "Vehicles tab \u2014 chips display",
+      "screenMarker": "Your vehicles",
+      "action": [
+        {
+          "type": "tap",
+          "selector": "Vehicles"
+        }
+      ],
+      "assertions": [
+        "Vehicles",
+        "All",
+        "Running",
+        "Stopped"
+      ],
+      "knownNonBug": false,
+      "retries": 1
+    },
+    {
+      "id": 2,
+      "title": "Filter icon \u2014 Offline option",
+      "screenMarker": "Offline",
+      "action": null,
+      "assertions": [
+        "Offline"
+      ],
+      "knownNonBug": false,
+      "retries": 1,
+      "notes": "Live-confirmed real behavior (filter panel shows an 'Offline (N)' checkbox option; the same tap target opens and closes it), but not currently automatable: the funnel icon has no content-desc/text of its own \u2014 it's merged into its parent row's accessibility node, whose merged bounds-center overlaps the 'Stopped' chip rather than the icon itself. run_plan.py's tap action only supports text-selector resolution, no coordinate fallback, so action is intentionally null pending a coordinate-tap capability addition to the shared script."
+    }
+  ],
+  "schemaVersion": 1
+}

@@ -56,6 +56,17 @@ expects. Do not deviate from it or invent extra top-level fields.
      re-encoding of what's already in the markdown, not new test authoring
      — never add an assertion the doc doesn't already list, never invent
      text you didn't see in the screenshot.
+   - **Credential exception:** if a step's `action.text` or an assertion
+     is (or embeds) the phone number, password, or user code documented in
+     `application/test-data.md`, write `${mobileNumber}`, `${password}`, or
+     `${userCode}` in the **plan** in place of that literal value (e.g. the
+     doc's `"Enter the OTP sent to 9355098542"` becomes `"Enter the OTP sent
+     to ${mobileNumber}"` in the plan) — see `SKILL.md`'s "Credential
+     tokens" section. This is the one sanctioned substitution against
+     "copy verbatim": it's what lets the compiled plan work for every test
+     user in `test-data/production.properties`/`test-data/staging.properties`
+     without recompiling. The flow doc's own markdown is never touched by
+     this — it keeps the literal value it was authored from.
    - `knownNonBug` — **always write `false`, for every step, with no
      exceptions.** This field exists so a human can later mark a specific
      step's assertions as a documented non-blocking quirk, but that is

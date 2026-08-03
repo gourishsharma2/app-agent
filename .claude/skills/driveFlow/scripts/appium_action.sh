@@ -35,7 +35,8 @@
 #                                            # instead of piping `source` through a raw grep call
 #   appium_action.sh wait-for <substring> [timeoutSeconds]        # poll until substring appears (default 30s)
 #   appium_action.sh wait-until-gone <substring> [timeoutSeconds] # poll until substring disappears (default 30s) — for loading states
-#   appium_action.sh run-plan <plan.json> [--from-step N]  # deterministically drives an ENTIRE compiled
+#   appium_action.sh run-plan <plan.json> [--from-step N] [--environment <Staging|Production>] [--test-user <name>] [--mobile <number>] [--password <pass>] [--user-code <code>]
+#                                            # deterministically drives an ENTIRE compiled
 #                                            # execution plan (see .claude/skills/compilePlan/SKILL.md) in one
 #                                            # call — opens/reuses a session per the plan's appPackage/appActivity,
 #                                            # dispatches every step's action(s), checks screenMarker + assertions,
@@ -43,6 +44,17 @@
 #                                            # one `PLAN_RESULT_JSON=...` line; leaves the session OPEN on exit
 #                                            # (pass or diverge) so a recovery pass or a resumed --from-step call
 #                                            # can reuse it. No LLM calls happen inside this — that's the point.
+#                                            # --environment selects test-data/<Staging|Production lowercased>.properties
+#                                            # (default Production); --test-user selects a named block within that file
+#                                            # (e.g. testUserOne) to resolve ${mobileNumber}/${password}/${userCode}
+#                                            # tokens anywhere in the plan against. Omitting --test-user falls back to
+#                                            # that file's `default*` entry if one exists, else run-plan fails asking
+#                                            # for an explicit --test-user (see test-data/*.properties for names).
+#                                            # --mobile/--password/--user-code supply a credential value directly on
+#                                            # the command line instead of looking it up from a test-data file — each
+#                                            # given value overrides just that one field; if both --mobile AND
+#                                            # --password are given, the test-data file/--test-user isn't consulted
+#                                            # at all (no file entry required for a fully ad-hoc credential set).
 #   appium_action.sh close-session
 #
 # All swipe/scroll/scroll-to gestures are driven via `adb shell input swipe`
@@ -77,6 +89,13 @@ running_emulator() {
 }
 
 fail() { echo "❌ $1" >&2; exit 1; }
+
+# cfg_get_file <file> <key> — reads a single flat KEY=value line out of any
+# .properties-style file (config.properties or test-data/*.properties).
+cfg_get_file() {
+  local file="$1" key="$2"
+  grep -E "^[[:space:]]*${key}[[:space:]]*=" "$file" 2>/dev/null | tail -1 | cut -d'=' -f2- | xargs
+}
 
 resolve_session_id() {
   [[ -f "$STATE_FILE" ]] || fail "No active session. Run 'appium_action.sh open-session <appPackage> <appActivity>' first."
@@ -384,17 +403,59 @@ case "$CMD" in
 
   run-plan)
     PLAN_FILE="${1:-}"
-    [[ -n "$PLAN_FILE" ]] || fail "Usage: appium_action.sh run-plan <plan.json> [--from-step N]"
+    [[ -n "$PLAN_FILE" ]] || fail "Usage: appium_action.sh run-plan <plan.json> [--from-step N] [--environment <Staging|Production>] [--test-user <name>] [--mobile <number>] [--password <pass>] [--user-code <code>]"
     [[ -f "$PLAN_FILE" ]] || fail "Plan file not found: $PLAN_FILE"
     shift || true
     FROM_STEP=1
-    if [[ "${1:-}" == "--from-step" ]]; then
-      FROM_STEP="${2:-1}"
+    ENVIRONMENT="Production"
+    TEST_USER=""
+    CLI_MOBILE=""
+    CLI_PASSWORD=""
+    CLI_USERCODE=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --from-step) FROM_STEP="${2:-1}"; shift 2 ;;
+        --environment) ENVIRONMENT="${2:-Production}"; shift 2 ;;
+        --test-user) TEST_USER="${2:-}"; shift 2 ;;
+        --mobile) CLI_MOBILE="${2:-}"; shift 2 ;;
+        --password) CLI_PASSWORD="${2:-}"; shift 2 ;;
+        --user-code) CLI_USERCODE="${2:-}"; shift 2 ;;
+        *) fail "Unknown run-plan flag: $1" ;;
+      esac
+    done
+
+    if [[ -n "$CLI_MOBILE" && -n "$CLI_PASSWORD" ]]; then
+      # Both given directly — use them as-is, no test-data file needed at all.
+      MOBILE="$CLI_MOBILE"
+      PASS="$CLI_PASSWORD"
+      USERCODE="$CLI_USERCODE"
+    else
+      ENV_LOWER=$(echo "$ENVIRONMENT" | tr '[:upper:]' '[:lower:]')
+      TEST_DATA_FILE="$PROJECT_ROOT/test-data/$ENV_LOWER.properties"
+      [[ -f "$TEST_DATA_FILE" ]] || fail "Test-data file not found: $TEST_DATA_FILE"
+
+      if [[ -z "$TEST_USER" ]]; then
+        TEST_USER="default"
+        MOBILE=$(cfg_get_file "$TEST_DATA_FILE" "defaultMobileNumber")
+        [[ -n "$MOBILE" ]] || fail "No 'default' test user in $TEST_DATA_FILE — pass --test-user <name>, or --mobile/--password directly."
+      else
+        MOBILE=$(cfg_get_file "$TEST_DATA_FILE" "${TEST_USER}MobileNumber")
+        [[ -n "$MOBILE" ]] || fail "Test user '$TEST_USER' not found in $TEST_DATA_FILE (no ${TEST_USER}MobileNumber key)."
+      fi
+      PASS=$(cfg_get_file "$TEST_DATA_FILE" "${TEST_USER}Password")
+      USERCODE=$(cfg_get_file "$TEST_DATA_FILE" "${TEST_USER}UserCode")
+
+      # A CLI value for just one field overrides that field only, keeping
+      # the other resolved from the test-data file above.
+      [[ -n "$CLI_MOBILE" ]] && MOBILE="$CLI_MOBILE"
+      [[ -n "$CLI_PASSWORD" ]] && PASS="$CLI_PASSWORD"
+      [[ -n "$CLI_USERCODE" ]] && USERCODE="$CLI_USERCODE"
     fi
+
     command -v python3 >/dev/null 2>&1 || fail "python3 is required for run-plan but was not found on PATH."
     DEVICE_SERIAL="$(running_emulator)"
     [[ -n "$DEVICE_SERIAL" ]] || fail "No running emulator detected (adb devices). Run launchApplication first."
-    python3 "$SCRIPT_DIR/run_plan.py" "$PLAN_FILE" "$FROM_STEP" "$APPIUM_URL" "$STATE_FILE" "$DEVICE_SERIAL"
+    python3 "$SCRIPT_DIR/run_plan.py" "$PLAN_FILE" "$FROM_STEP" "$APPIUM_URL" "$STATE_FILE" "$DEVICE_SERIAL" "$MOBILE" "$PASS" "$USERCODE"
     exit $?
     ;;
 

@@ -403,7 +403,7 @@ case "$CMD" in
 
   run-plan)
     PLAN_FILE="${1:-}"
-    [[ -n "$PLAN_FILE" ]] || fail "Usage: appium_action.sh run-plan <plan.json> [--from-step N] [--environment <Staging|Production>] [--test-user <name>] [--mobile <number>] [--password <pass>] [--user-code <code>]"
+    [[ -n "$PLAN_FILE" ]] || fail "Usage: appium_action.sh run-plan <plan.json> [--from-step N] [--environment <Staging|Production>] [--test-user <name>] [--mobile <number>] [--password <pass>] [--user-code <code>] [--api-env <name>] [--token <token>] [--device-name <name>] [--device-id <id>] [--android-version <v>]"
     [[ -f "$PLAN_FILE" ]] || fail "Plan file not found: $PLAN_FILE"
     shift || true
     FROM_STEP=1
@@ -412,6 +412,12 @@ case "$CMD" in
     CLI_MOBILE=""
     CLI_PASSWORD=""
     CLI_USERCODE=""
+    # API runtime inputs — only needed by plans containing a call-api step.
+    API_ENV=""
+    API_TOKEN=""
+    API_DEVICE_NAME=""
+    API_DEVICE_ID=""
+    API_ANDROID_VERSION=""
     while [[ $# -gt 0 ]]; do
       case "$1" in
         --from-step) FROM_STEP="${2:-1}"; shift 2 ;;
@@ -420,9 +426,19 @@ case "$CMD" in
         --mobile) CLI_MOBILE="${2:-}"; shift 2 ;;
         --password) CLI_PASSWORD="${2:-}"; shift 2 ;;
         --user-code) CLI_USERCODE="${2:-}"; shift 2 ;;
+        --api-env) API_ENV="${2:-}"; shift 2 ;;
+        --token) API_TOKEN="${2:-}"; shift 2 ;;
+        --device-name) API_DEVICE_NAME="${2:-}"; shift 2 ;;
+        --device-id) API_DEVICE_ID="${2:-}"; shift 2 ;;
+        --android-version) API_ANDROID_VERSION="${2:-}"; shift 2 ;;
         *) fail "Unknown run-plan flag: $1" ;;
       esac
     done
+
+    # --api-env defaults to the app environment already being targeted, so a
+    # flow with API steps needs no extra flag when both point at the same
+    # backend — which they must, or API and UI describe different datasets.
+    [[ -z "$API_ENV" ]] && API_ENV="$ENVIRONMENT"
 
     if [[ -n "$CLI_MOBILE" && -n "$CLI_PASSWORD" ]]; then
       # Both given directly — use them as-is, no test-data file needed at all.
@@ -455,7 +471,30 @@ case "$CMD" in
     command -v python3 >/dev/null 2>&1 || fail "python3 is required for run-plan but was not found on PATH."
     DEVICE_SERIAL="$(running_emulator)"
     [[ -n "$DEVICE_SERIAL" ]] || fail "No running emulator detected (adb devices). Run launchApplication first."
-    python3 "$SCRIPT_DIR/run_plan.py" "$PLAN_FILE" "$FROM_STEP" "$APPIUM_URL" "$STATE_FILE" "$DEVICE_SERIAL" "$MOBILE" "$PASS" "$USERCODE"
+    # 9th arg: API runtime inputs as JSON. Built with python3 rather than
+    # printf so a value containing a quote or backslash can't corrupt it.
+    # `userCode` is not included here — run_plan.py seeds it from the resolved
+    # credentials, so ${runtime.userCode} in headers.md works either way.
+    API_JSON=$(
+      API_ENV="$API_ENV" \
+      API_TOKEN="$API_TOKEN" \
+      API_DEVICE_NAME="$API_DEVICE_NAME" \
+      API_DEVICE_ID="$API_DEVICE_ID" \
+      API_ANDROID_VERSION="$API_ANDROID_VERSION" \
+      python3 -c '
+import json, os
+out = {"environment": os.environ.get("API_ENV", "")}
+for key, var in (("token", "API_TOKEN"),
+                 ("deviceName", "API_DEVICE_NAME"),
+                 ("deviceId", "API_DEVICE_ID"),
+                 ("androidVersion", "API_ANDROID_VERSION")):
+    value = os.environ.get(var, "")
+    if value:
+        out[key] = value
+print(json.dumps(out))
+'
+    )
+    python3 "$SCRIPT_DIR/run_plan.py" "$PLAN_FILE" "$FROM_STEP" "$APPIUM_URL" "$STATE_FILE" "$DEVICE_SERIAL" "$MOBILE" "$PASS" "$USERCODE" "$API_JSON"
     exit $?
     ;;
 

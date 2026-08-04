@@ -3,7 +3,7 @@
   "sourceDoc": "flow/userLogin.md",
   "referencedDocs": [],
   "appPackage": "com.wheelseyeoperator.debug",
-  "appActivity": ".ui.launch.LaunchActivity",
+  "appActivity": "com.wheelseyeoperator.MainActivity",
   "steps": [
     {
       "id": 1,
@@ -26,15 +26,18 @@
       "action": [
         {
           "type": "tap",
-          "selector": "+91"
+          "selector": "+91",
+          "settleMs": 700
         },
         {
           "type": "type",
-          "text": "${mobileNumber}"
+          "text": "${mobileNumber}",
+          "settleMs": 300
         },
         {
           "type": "tap",
-          "selector": "Continue with password"
+          "selector": "Continue with password",
+          "settleMs": 700
         }
       ],
       "assertions": [
@@ -45,7 +48,7 @@
       ],
       "knownNonBug": false,
       "retries": 1,
-      "notes": "Phone-number EditText has no content-desc/text of its own (per loginFlow.plan.json step 3), so the '+91' country-code badge is used as the tap selector to focus it before typing, matching the previously-verified loginFlow pattern. Entering the number before tapping 'Continue with password' is what pre-fills the phone-number field shown on the resulting password screen."
+      "notes": "Phone-number EditText has no content-desc/text of its own (per loginFlow.plan.json step 3), so the '+91' country-code badge is used as the tap selector to focus it before typing, matching the previously-verified loginFlow pattern. Entering the number before tapping 'Continue with password' is what pre-fills the phone-number field shown on the resulting password screen. settleMs added after the +91 tap: verified live that typing immediately after focusing this Compose field drops the first character, producing a 9-digit number that still reaches the password screen and passes every assertion while logging in as the wrong user."
     },
     {
       "id": 3,
@@ -53,15 +56,14 @@
       "screenMarker": "FasTag",
       "action": [
         {
-          "type": "back"
-        },
-        {
           "type": "tap",
-          "selector": "Continue with password"
+          "selector": "password=\"true\"",
+          "settleMs": 700
         },
         {
           "type": "type",
-          "text": "${password}"
+          "text": "${password}",
+          "settleMs": 300
         },
         {
           "type": "tap",
@@ -73,8 +75,8 @@
       ],
       "knownNonBug": false,
       "retries": 1,
-      "notes": "Per flow/userLogin.md Step 3: 'user re-opens the password screen (back \u2192 Continue with password)' before entering the correct password \u2014 back returns to the login screen with the phone number retained, then re-tapping Continue with password re-opens a fresh password screen with an empty, auto-focused password field, matching the identical pattern already verified live in loginFlow.plan.json step 7. Post-login 'Unauthenticated App Detected'/notification-permission prompts (application/known-behaviors.md) are known non-blocking quirks, not asserted here."
+      "notes": "Types directly into the password field already present on this screen. The previous back + re-tap of \"Continue with password\" was copied from loginFlow, where it exists only to clear a deliberately-wrong password; userLogin never types one, and verified live that back does NOT leave the password screen on this build, so the re-tap could never resolve. Field selected via its password=\"true\" attribute, which is unique here (the only other EditText is the pre-filled phone number)."
     }
   ],
-  "schemaVersion": 1
+  "schemaVersion": 2
 }

@@ -92,11 +92,11 @@ plan, and leaving them untouched is automatically enough to keep reusing it.
 changes, independent of any flow doc) invalidates every plan at once,
 forcing a clean recompile against the new shape.
 
-## Plan JSON schema (schemaVersion 1)
+## Plan JSON schema (schemaVersion 2)
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "flowName": "loginFlow",
   "sourceDoc": "flow/loginFlow.md",
   "referencedDocs": [],
@@ -152,7 +152,36 @@ Field notes:
   `tap` / `type` / `back` / `scroll` / `scroll-to` / `wait-for` /
   `wait-until-gone` / `double-tap` / `long-press` — the exact same verbs as
   `appium_action.sh`'s existing subcommands, because `run-plan` dispatches
-  each action to that subcommand's underlying logic directly.
+  each action to that subcommand's underlying logic directly — plus the two
+  non-UI verbs added in schema 2: `call-api` and `set-context` (see below).
+- **`when`** (schema 2, optional) is a predicate evaluated against the runtime
+  context *before* the step's actions run. A false predicate marks the step
+  `SKIP` — recorded with its reason in `PLAN_RESULT_JSON` — and execution
+  continues with the next step. This is what a flow doc's `IF ... ENDIF` block
+  compiles to; see `.claude/skills/apiCall/SKILL.md` for the markdown syntax
+  and why a per-step predicate is used instead of block markers in the plan.
+
+  ```json
+  { "id": 4, "when": { "path": "api.running", "op": ">", "value": 0 },
+    "assertions": ["Running"] }
+  ```
+
+  `op` is one of `>` `>=` `<` `<=` `==` `!=` `exists` `not-exists`. A path that
+  isn't in the context is a **divergence, not a skip** — a typo that silently
+  skipped its step would produce a green run that validated nothing. Use
+  `exists`/`not-exists` when absence is the thing being tested.
+- **`call-api`** performs a request and binds the response into the runtime
+  context, where later steps read it as `api.<field>` (the backend envelope's
+  `data` is unwrapped). Configuration comes from `api/environments/<env>/`;
+  nothing about the URL or headers belongs in the plan.
+
+  ```json
+  { "type": "call-api", "endpoint": "getAllFilterCount", "bind": "api" }
+  ```
+
+  Optional: `method` (default `GET`), `body`, `expectStatus` (default: any 2xx).
+- **`set-context`** stores a value for later steps: `{ "type": "set-context",
+  "key": "flow.threshold", "value": 5 }`.
 - **`selector`** is always text (`content-desc`/visible label), resolved to
   live `bounds` at execute time the same way `find` already does — never a
   raw pixel coordinate, so a plan survives emulator resolution changes.
@@ -219,6 +248,21 @@ what lets one compiled plan drive the login flow as any test user in either
 environment without ever being recompiled — only `flow-compiler` writing the
 token in the first place, and `run-plan` substituting it later, are aware
 credentials are involved at all.
+
+As of schema 2 the same `${...}` syntax reaches **any** runtime-context path,
+not just the three credential keys — `${api.running}`, `${runtime.userCode}`,
+`${flow.threshold}`. Two consequences worth knowing:
+
+- Resolution is now **per step, at the moment that step runs**, not one pass
+  before step 1. It has to be: `${mobileNumber}` is known up front, but
+  `${api.running}` only exists once an earlier `call-api` step has fetched it.
+- An unresolved token is left **literal** and reported in
+  `PLAN_RESULT_JSON.unresolvedTokens`, rather than replaced with an empty
+  string — blanking a selector turns a typo into a confusing
+  `selector-not-found` several steps later.
+
+Credentials are seeded into the context before step 1 and mirrored at the top
+level, so every plan compiled under schema 1 resolves exactly as it did.
 
 `run-plan` also accepts `--mobile <number>`/`--password <pass>`/`--user-code
 <code>` to supply a value directly instead of looking it up from a

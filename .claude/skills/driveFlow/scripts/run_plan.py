@@ -14,22 +14,61 @@ outcome without re-deriving it, and leaves the Appium session open on exit
 (divergence or clean finish) so a recovery pass or a `close-session` call can
 still use it.
 
-Before executing, `${mobileNumber}`/`${password}`/`${userCode}` tokens
-anywhere in the plan's strings are substituted with values resolved by
-`appium_action.sh` from `test-data/<environment>.properties` — this is what
-lets one compiled plan serve every test user/environment without
-recompiling.
+`${...}` tokens anywhere in a step's strings are resolved against the runtime
+context (see .claude/skills/apiCall/scripts/context_store.py) at the moment
+that step runs — **not** in one pass before the flow starts. That change is
+what makes API-driven execution possible: `${mobileNumber}` is known up front,
+but `api.running` only exists once a `call-api` step earlier in the same run
+has fetched it. Credentials are seeded into the context before step 1 and are
+also mirrored at the top level, so every plan compiled before the context
+existed keeps resolving exactly as it did.
+
+A step may also carry a `when` predicate. It is evaluated against the context
+before the step's actions run; a false predicate marks the step SKIP (with the
+reason recorded) and execution continues with the next step. Predicates are
+evaluated here, in code — no model call — so conditional flows keep the
+zero-LLM guarantee this file exists to provide.
 
 Not meant to be invoked directly — always via:
     appium_action.sh run-plan <plan.json> [--from-step N] [--environment <Staging|Production>] [--test-user <name>]
 """
 import json
+import os
 import re
 import subprocess
 import sys
 import time
 import urllib.request
 import urllib.error
+
+# The API layer lives in its own skill; import it rather than duplicating the
+# context/config/HTTP logic here.
+_API_SCRIPTS = os.path.abspath(os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "..", "..", "apiCall", "scripts",
+))
+if _API_SCRIPTS not in sys.path:
+    sys.path.insert(0, _API_SCRIPTS)
+
+try:
+    import config_loader
+    import context_store
+    import http_executor
+    API_AVAILABLE = True
+    API_IMPORT_ERROR = None
+except ImportError as _e:  # apiCall skill absent — UI-only plans still run
+    config_loader = context_store = http_executor = None
+    API_AVAILABLE = False
+    API_IMPORT_ERROR = str(_e)
+
+PROJECT_ROOT = os.path.abspath(os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", ".."))
+API_ROOT = os.path.join(PROJECT_ROOT, "api")
+# Written by `api_action.sh auth` / `set-runtime`. Reading it here is what lets
+# an out-of-band `auth` call supply the token for a plan run, instead of the
+# token having to travel on a command line where `ps` would expose it.
+API_CONTEXT_FILE = os.path.join(
+    PROJECT_ROOT, ".claude", "skills", "apiCall", ".context.json")
 
 SETTLE_SECONDS = 1.0
 MARKER_POLL_TIMEOUT = 10
@@ -64,12 +103,41 @@ class Divergence(Exception):
 
 
 class PlanExecutor:
-    def __init__(self, appium_url, device_serial, session_id):
+    def __init__(self, appium_url, device_serial, session_id,
+                 context=None, api_env_name=None):
         self.appium_url = appium_url
         self.device_serial = device_serial
         self.session_id = session_id
+        self.context = context
+        self.api_env_name = api_env_name
+        self._api_env = None
+        self.api_calls = []
         self._width = None
         self._height = None
+
+    def api_env(self):
+        """Loads the API environment config once, on first use.
+
+        Deliberately lazy: a UI-only plan must not fail because api/ is
+        missing or an environment wasn't passed.
+        """
+        if self._api_env is None:
+            if not API_AVAILABLE:
+                raise Divergence(
+                    "api-unavailable",
+                    f"the apiCall skill could not be imported ({API_IMPORT_ERROR}); "
+                    "a call-api step needs .claude/skills/apiCall/scripts/")
+            if not self.api_env_name:
+                raise Divergence(
+                    "api-environment-missing",
+                    "a call-api step needs an environment — pass environment=<name> "
+                    "to /run (or --api-env to run-plan)")
+            try:
+                self._api_env = config_loader.load_environment(
+                    self.api_env_name, API_ROOT)
+            except config_loader.ConfigError as e:
+                raise Divergence("api-config-error", str(e))
+        return self._api_env
 
     def source(self):
         return http("GET", f"{self.appium_url}/session/{self.session_id}/source")["value"]
@@ -154,7 +222,22 @@ class PlanExecutor:
 
     def run_action(self, action, page_hint):
         """Executes one action dict. Returns a fresh page source if it fetched
-        one (scroll-to/wait-* do), else None — callers refetch as needed."""
+        one (scroll-to/wait-* do), else None — callers refetch as needed.
+
+        An action may carry `settleMs` to pause after it completes. This is not
+        cosmetic: tapping a Compose text field and immediately running
+        `adb input text` drops the first character, because the field has not
+        taken focus yet. Verified live — a 10-digit number arrived as 9 digits,
+        which still reached the next screen and so passed every assertion while
+        silently logging in as the wrong user.
+        """
+        result = self._dispatch(action, page_hint)
+        settle_ms = action.get("settleMs")
+        if settle_ms:
+            time.sleep(settle_ms / 1000.0)
+        return result
+
+    def _dispatch(self, action, page_hint):
         a_type = action["type"]
 
         if a_type == "tap":
@@ -204,9 +287,66 @@ class PlanExecutor:
         elif a_type == "wait-until-gone":
             return self._wait(action["text"], action.get("timeoutSeconds", 30), want_present=False)
 
+        elif a_type == "call-api":
+            self._call_api(action)
+            return page_hint  # no UI change; keep whatever page we had
+
+        elif a_type == "set-context":
+            if "key" not in action:
+                raise Divergence("set-context-malformed", "`key` is required")
+            self.context.set(action["key"], action.get("value"))
+            log(f"run-plan: set-context {self.context.describe(action['key'])}")
+            return page_hint
+
         else:
             raise Divergence("unknown-action-type", a_type)
         return None
+
+    def _call_api(self, action):
+        """Executes one API call and binds its response into the context."""
+        env = self.api_env()
+        endpoint = action.get("endpoint")
+        if not endpoint:
+            raise Divergence("call-api-malformed", "`endpoint` is required")
+        bind = action.get("bind", "api")
+        method = action.get("method", "GET")
+
+        try:
+            url = config_loader.resolve_path_key(env, endpoint)
+            headers = config_loader.build_headers(env, self.context)
+        except config_loader.ConfigError as e:
+            raise Divergence("api-config-error", str(e))
+
+        log(f"run-plan: executing API {method.upper()} {url}")
+        try:
+            result = http_executor.execute(
+                method, url, headers, body=action.get("body"),
+                timeout=env["timeout"], retries=env["retry_count"], log=log)
+        except http_executor.ApiError as e:
+            raise Divergence(f"api-{e.kind}", str(e))
+
+        expect = action.get("expectStatus")
+        status_ok = (result["status"] == expect) if expect is not None \
+            else (200 <= result["status"] < 300)
+
+        self.api_calls.append({
+            "endpoint": endpoint,
+            "method": result["method"],
+            "status": result["status"],
+            "elapsedMs": result["elapsedMs"],
+            "bind": bind,
+            "note": result["note"],
+            "ok": status_ok,
+        })
+
+        if not status_ok:
+            detail = result["note"] or f"expected {expect}, got {result['status']}"
+            raise Divergence("api-status", detail)
+
+        bound = self.context.bind_response(bind, result)
+        variables = sorted(k for k in bound if not k.startswith("_"))
+        log(f"run-plan: response {result['status']} in {result['elapsedMs']}ms — "
+            f"created {', '.join(f'{bind}.{v}' for v in variables) or '(no fields)'}")
 
     def _wait(self, text, timeout, want_present):
         elapsed = 0
@@ -251,20 +391,79 @@ class PlanExecutor:
         raise Divergence("scroll-not-found", selector)
 
 
-def substitute_credentials(obj, creds):
-    """Recursively replaces ${mobileNumber}/${password}/${userCode} tokens
-    (see .claude/skills/compilePlan/SKILL.md) in every string leaf of a
-    plan's dict/list tree with resolved values, so one compiled plan works
-    for every test user/environment without recompiling."""
-    if isinstance(obj, str):
-        for key, val in creds.items():
-            obj = obj.replace("${" + key + "}", val)
-        return obj
-    if isinstance(obj, list):
-        return [substitute_credentials(item, creds) for item in obj]
-    if isinstance(obj, dict):
-        return {k: substitute_credentials(v, creds) for k, v in obj.items()}
-    return obj
+COMPARISONS = {
+    ">":  lambda a, b: a > b,
+    ">=": lambda a, b: a >= b,
+    "<":  lambda a, b: a < b,
+    "<=": lambda a, b: a <= b,
+    "==": lambda a, b: a == b,
+    "!=": lambda a, b: a != b,
+}
+PRESENCE_OPS = ("exists", "not-exists")
+
+
+def _as_number(value):
+    if isinstance(value, bool):
+        return None  # don't let True compare as 1
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value.strip())
+        except ValueError:
+            return None
+    return None
+
+
+def evaluate_when(cond, context):
+    """Evaluates a step's `when` predicate. Returns (should_run, reason).
+
+    A missing path is a **divergence, not a skip**. A typo'd path that silently
+    skipped its step would produce a green run that validated nothing — the
+    exact failure mode this repo's docs warn about repeatedly. Use the explicit
+    `exists` / `not-exists` operators when absence is the thing being tested.
+    """
+    if not isinstance(cond, dict):
+        raise Divergence("condition-malformed", f"`when` must be an object, got {type(cond).__name__}")
+
+    path = cond.get("path")
+    op = (cond.get("op") or "").strip()
+    if not path or not op:
+        raise Divergence("condition-malformed",
+                         "`when` requires both `path` and `op`")
+    if op not in COMPARISONS and op not in PRESENCE_OPS:
+        allowed = ", ".join(list(COMPARISONS) + list(PRESENCE_OPS))
+        raise Divergence("condition-unknown-op", f"{op!r} (allowed: {allowed})")
+
+    found, actual = context.get(path)
+
+    if op in PRESENCE_OPS:
+        present = found and actual is not None
+        should_run = present if op == "exists" else not present
+        return should_run, f"{path} {'is set' if present else 'is not set'} (op {op})"
+
+    if not found:
+        raise Divergence(
+            "condition-path-missing",
+            f"{path} is not in the runtime context (op {op}). Check that an "
+            f"earlier call-api step bound it and that the path matches the "
+            f"contract doc under api/contracts/.")
+
+    expected = cond.get("value")
+    actual_num, expected_num = _as_number(actual), _as_number(expected)
+
+    if actual_num is not None and expected_num is not None:
+        result = COMPARISONS[op](actual_num, expected_num)
+        return result, f"{path} = {actual} {op} {expected} -> {result}"
+
+    if op in ("==", "!="):
+        result = COMPARISONS[op](str(actual), str(expected))
+        return result, f"{path} = {actual!r} {op} {expected!r} -> {result}"
+
+    raise Divergence(
+        "condition-type-mismatch",
+        f"cannot compare {path} = {actual!r} with {expected!r} using {op} — "
+        f"numeric comparison needs numbers on both sides")
 
 
 def check_assertions(page, assertions):
@@ -275,10 +474,42 @@ def run(plan, from_step, executor):
     steps = sorted(plan.get("steps", []), key=lambda s: s["id"])
     steps_run = []
     diverged_at = None
+    context = executor.context
 
-    for step in steps:
-        if step["id"] < from_step:
+    for raw_step in steps:
+        if raw_step["id"] < from_step:
             continue
+
+        # Resolve ${...} now, not before step 1 — a value bound by an earlier
+        # call-api step is only in the context by this point.
+        try:
+            step = context.resolve_tokens(raw_step)
+        except Exception as e:  # noqa: BLE001 — never let resolution kill the run silently
+            steps_run.append({"id": raw_step["id"], "status": "FAIL",
+                              "reason": "token-resolution-failed", "detail": str(e)})
+            diverged_at = {"stepId": raw_step["id"],
+                           "reason": "token-resolution-failed", "detail": str(e)}
+            break
+
+        # Conditional execution: a false predicate skips this step and records
+        # why, rather than failing the flow.
+        if step.get("when") is not None:
+            try:
+                should_run, reason = evaluate_when(step["when"], context)
+            except Divergence as d:
+                log(f"run-plan: step {step['id']} condition error — {d.reason}: {d.detail}")
+                steps_run.append({"id": step["id"], "status": "FAIL",
+                                  "reason": d.reason, "detail": d.detail})
+                diverged_at = {"stepId": step["id"], "reason": d.reason,
+                               "detail": d.detail}
+                break
+            if not should_run:
+                log(f"run-plan: SKIP step {step['id']} — condition false: {reason}")
+                steps_run.append({"id": step["id"], "status": "SKIP",
+                                  "skipReason": reason,
+                                  "condition": step["when"]})
+                continue
+            log(f"run-plan: step {step['id']} condition true: {reason}")
 
         retries = step.get("retries", 1)
         actions = step.get("action")
@@ -292,6 +523,12 @@ def run(plan, from_step, executor):
         page_after_action = None
         while attempt < max(1, retries):
             attempt += 1
+            # Reset per attempt, not per step. Carrying the previous attempt's
+            # page into a retry makes `tap` resolve its selector against the
+            # screen as it was *before* the failed attempt acted on it, so the
+            # retry taps stale coordinates on a screen that has since changed —
+            # observed live as a tap landing on an unrelated tab.
+            page_after_action = None
             try:
                 for action in actions:
                     page_after_action = executor.run_action(action, page_after_action) or page_after_action
@@ -341,8 +578,56 @@ def run(plan, from_step, executor):
             break
 
     overall = "DIVERGED" if diverged_at else "PASS"
-    return {"flow": plan.get("flowName"), "overallStatus": overall,
-            "stepsRun": steps_run, "divergedAt": diverged_at}
+    result = {"flow": plan.get("flowName"), "overallStatus": overall,
+              "stepsRun": steps_run, "divergedAt": diverged_at}
+
+    skipped = [s for s in steps_run if s["status"] == "SKIP"]
+    if skipped:
+        result["skipped"] = [{"id": s["id"], "reason": s["skipReason"]} for s in skipped]
+    if executor.api_calls:
+        result["apiCalls"] = executor.api_calls
+    if context.unresolved:
+        # Surfaced rather than swallowed: an unresolved token stayed literal in
+        # whatever selector/assertion used it, which usually explains a
+        # downstream failure.
+        result["unresolvedTokens"] = list(context.unresolved)
+        log("run-plan: WARNING unresolved ${} tokens: " + ", ".join(context.unresolved))
+    return result
+
+
+class _FallbackContext:
+    """Minimal stand-in used only when the apiCall skill can't be imported.
+
+    Keeps a UI-only plan running with exactly the old credential-substitution
+    behavior, so deleting or breaking api/ never takes the existing UI suite
+    down with it. A call-api step still fails loudly via api_env().
+    """
+
+    def __init__(self, values):
+        self.data = {k: v for k, v in values.items() if v not in (None, "")}
+        self.unresolved = []
+
+    def get(self, path):
+        if path in self.data:
+            return True, self.data[path]
+        return False, None
+
+    def set(self, path, value):
+        self.data[path] = value
+
+    def describe(self, path):
+        return f"{path} = {self.data.get(path, '<not set>')}"
+
+    def resolve_tokens(self, obj):
+        if isinstance(obj, str):
+            for key, val in self.data.items():
+                obj = obj.replace("${" + key + "}", str(val))
+            return obj
+        if isinstance(obj, list):
+            return [self.resolve_tokens(v) for v in obj]
+        if isinstance(obj, dict):
+            return {k: self.resolve_tokens(v) for k, v in obj.items()}
+        return obj
 
 
 def open_session(appium_url, device_serial, app_package, app_activity):
@@ -367,13 +652,46 @@ def main():
      mobile_number, password, user_code) = sys.argv[1:9]
     from_step = int(from_step_str)
 
+    # Optional 9th arg: JSON of API runtime inputs + environment name. Absent
+    # for a UI-only run, which is why it's optional rather than positional —
+    # existing callers keep working untouched.
+    api_env_name = None
+    runtime_inputs = {}
+    if len(sys.argv) > 9 and sys.argv[9].strip():
+        try:
+            extra = json.loads(sys.argv[9])
+            api_env_name = extra.get("environment")
+            runtime_inputs = {k: v for k, v in extra.items() if k != "environment"}
+        except json.JSONDecodeError as e:
+            log(f"run-plan: ignoring malformed API runtime JSON ({e})")
+
     with open(plan_path) as f:
         plan = json.load(f)
-    plan = substitute_credentials(plan, {
-        "mobileNumber": mobile_number,
-        "password": password,
-        "userCode": user_code,
-    })
+
+    if API_AVAILABLE:
+        context = context_store.seed(
+            runtime_inputs=runtime_inputs,
+            credentials={"mobileNumber": mobile_number,
+                         "password": password,
+                         "userCode": user_code},
+        )
+        # Fill in any runtime input this invocation didn't supply from the
+        # persisted context. Values passed on the command line win, so an
+        # explicit flag always overrides a stale stored one.
+        persisted = context_store.RuntimeContext.load(API_CONTEXT_FILE)
+        carried = []
+        for key, value in (persisted.data.get("runtime") or {}).items():
+            already, _ = context.get(f"runtime.{key}")
+            if not already and value not in (None, ""):
+                context.set(f"runtime.{key}", value)
+                carried.append(key)
+        if carried:
+            log("run-plan: carried runtime input(s) from the apiCall context: "
+                + ", ".join(sorted(carried)))
+    else:
+        context = _FallbackContext({"mobileNumber": mobile_number,
+                                    "password": password,
+                                    "userCode": user_code})
 
     try:
         with open(state_file) as f:
@@ -384,7 +702,8 @@ def main():
             f.write(session_id)
         log(f"run-plan: opened session {session_id}")
 
-    executor = PlanExecutor(appium_url, device_serial, session_id)
+    executor = PlanExecutor(appium_url, device_serial, session_id,
+                            context=context, api_env_name=api_env_name)
 
     try:
         result = run(plan, from_step, executor)

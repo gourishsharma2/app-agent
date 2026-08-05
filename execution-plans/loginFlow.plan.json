@@ -1,10 +1,10 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "flowName": "loginFlow",
   "sourceDoc": "flow/loginFlow.md",
   "referencedDocs": [],
   "appPackage": "com.wheelseyeoperator.debug",
-  "appActivity": ".ui.launch.LaunchActivity",
+  "appActivity": "com.wheelseyeoperator.MainActivity",
   "steps": [
     {
       "id": 1,

@@ -66,6 +66,31 @@ fi
 info "Target APK: $ABS_APK_PATH"
 info "Appium URL: $APPIUM_URL"
 
+# Resolve the Android SDK so `emulator`, `adb` and `aapt` work without the
+# caller having exported ANDROID_HOME or edited their shell profile. Callers
+# must invoke this script as a bare command (see CLAUDE.md) so it matches the
+# exact-path entry in .claude/settings.json — that rules out prefixing the call
+# with `PATH=...`/`ANDROID_HOME=...`, so the SDK lookup has to live here.
+# Exporting ANDROID_HOME also feeds find_aapt() further down, which reads it to
+# locate build-tools for the APK's package/version metadata.
+if [[ -z "${ANDROID_HOME:-}" ]]; then
+  for candidate in "${ANDROID_SDK_ROOT:-}" "$HOME/Library/Android/sdk" "$HOME/Android/Sdk"; do
+    if [[ -n "$candidate" && -d "$candidate" ]]; then
+      ANDROID_HOME="$candidate"
+      break
+    fi
+  done
+fi
+if [[ -n "${ANDROID_HOME:-}" ]]; then
+  export ANDROID_HOME
+  export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+  for sdk_bin in "$ANDROID_HOME/emulator" "$ANDROID_HOME/platform-tools"; do
+    [[ -d "$sdk_bin" ]] && PATH="$sdk_bin:$PATH"
+  done
+  export PATH
+  info "Android SDK: $ANDROID_HOME"
+fi
+
 command -v adb >/dev/null 2>&1 || fail "adb not found on PATH. Ensure Android SDK platform-tools is on PATH."
 command -v curl >/dev/null 2>&1 || fail "curl not found on PATH."
 

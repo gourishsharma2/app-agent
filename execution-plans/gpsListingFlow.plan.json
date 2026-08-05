@@ -5,28 +5,52 @@
     "flow/userLogin.md"
   ],
   "appPackage": "com.wheelseyeoperator.debug",
-  "appActivity": ".ui.launch.LaunchActivity",
+  "appActivity": "com.wheelseyeoperator.MainActivity",
   "steps": [
     {
       "id": 1,
-      "title": "Vehicles tab \u2014 chips and filter",
-      "screenMarker": "Vehicles",
-      "action": [
-        {
-          "type": "tap",
-          "selector": "Vehicles"
-        }
-      ],
+      "title": "Vehicles tab \u2014 filter chips",
+      "action": {
+        "type": "tap",
+        "selector": "Vehicles&#10;Tab 2 of 4",
+        "settleMs": 3000
+      },
+      "screenMarker": "Stopped (",
       "assertions": [
         "Vehicles",
-        "All",
-        "Running",
-        "Stopped"
+        "All (",
+        "Running (",
+        "Stopped ("
+      ],
+      "knownNonBug": false,
+      "retries": 2,
+      "notes": "Chip label prefixes only \u2014 counts validated against the API in step 3. Verified live 3 Aug 2026 that the chip row contains exactly three clickable chips and no filter icon/Offline option. settleMs covers the fleet list load. Selector is the exact XML-encoded content-desc \"Vehicles&#10;Tab 2 of 4\" because the bare string \"Vehicles\" is ambiguous and resolved to the wrong element (Loads tab) in a raw substring match."
+    },
+    {
+      "id": 2,
+      "title": "Read the fleet counts from the backend",
+      "action": {
+        "type": "call-api",
+        "endpoint": "getAllFilterCount",
+        "bind": "api"
+      },
+      "assertions": [],
+      "knownNonBug": false,
+      "retries": 1,
+      "notes": "No UI interaction. Binds api.running / api.stoppage / api.noInfo. A non-2xx status fails the step, which is why assertions is empty \u2014 the status check IS the assertion. See api/contracts/getAllFilterCount.md."
+    },
+    {
+      "id": 3,
+      "title": "Chip counts match the backend",
+      "action": null,
+      "assertions": [
+        "Running (${api.running})",
+        "Stopped (${api.stoppage})"
       ],
       "knownNonBug": false,
       "retries": 1,
-      "notes": "Vehicles tab is next to FasTag in the Home page tab row. Numeric counts on the All/Running/Stopped chips are dynamic fleet data (e.g. All (94), Running (1), Stopped (3) at authoring time) \u2014 assertions match the chip label prefix only, per flow/gpsListingFlow.md Step 1."
+      "notes": "No IF guard: verified live 3 Aug 2026 that the Running chip renders 'Running (0)' when nothing is running, so an API-sourced expectation is correct at zero too \u2014 this assertion now runs unconditionally instead of being skipped. api.noInfo / the All chip are deliberately not asserted here \u2014 the app exposes no No-Info chip, and the All chip is not the sum of running+stoppage+noInfo (verified live: 0+2+79=81 vs All=92)."
     }
   ],
-  "schemaVersion": 1
+  "schemaVersion": 2
 }

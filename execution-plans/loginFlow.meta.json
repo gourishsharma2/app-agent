@@ -1,6 +1,6 @@
 {
-  "schemaVersion": 1,
-  "planVersion": 3,
+  "schemaVersion": 2,
+  "planVersion": 4,
   "docHashes": {
     "flow/loginFlow.md": "sha256:53be031c3840762d1390ee46ee6fd48bedfd77b801c335c53d52155deba1a119"
   },
@@ -11,5 +11,5 @@
     "screenshots or figma Links/loginFlow/Step 6.png": "sha256:0f099ef4af74ef314ae26e7ad8b6e310a10d3cc17b1d4cbfc1197667ab2ba138"
   },
   "appVersion": "com.wheelseyeoperator.debug@24.1.0(242410)",
-  "generatedAt": "2026-07-31T13:01:36Z"
+  "generatedAt": "2026-08-03T09:40:36Z"
 }

@@ -22,7 +22,12 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 PLAN_DIR="$PROJECT_ROOT/execution-plans"
-SCHEMA_VERSION=1
+# 2: adds a step's optional `when` predicate plus the `call-api` and
+#    `set-context` action types (API-driven conditional execution). Bumping
+#    this invalidates every existing plan on purpose — a plan compiled under
+#    schema 1 has no `when` fields, so it must be recompiled before a doc's
+#    IF/ENDIF blocks can take effect.
+SCHEMA_VERSION=2
 
 fail() { echo "❌ $1" >&2; exit 1; }
 

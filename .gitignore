@@ -21,3 +21,11 @@
 
 ### generateReport skill (transient run state) ###
 .claude/skills/generateReport/.run_state
+
+### apiCall skill (runtime context — holds a session token) ###
+.claude/skills/apiCall/.context.json
+.claude/skills/apiCall/.context.json.tmp
+
+### Python bytecode ###
+__pycache__/
+*.pyc

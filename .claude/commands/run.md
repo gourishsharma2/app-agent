@@ -16,6 +16,41 @@ nor `test-data/staging.properties` does, so in practice it's always
 prompted for unless given up front) **and no `--mobile`/`--password` flags
 were given** (see below).
 
+## API runtime inputs (`key=value` form)
+
+Anywhere in the argument text, `key=value` pairs may be given to supply the
+runtime values the API layer needs. These are **not** positional and never
+consume `$1`–`$4`:
+
+```
+/run environment=stage token=xxxx userCode=WE12345 deviceName=Samsung deviceId=xxxx androidVersion=16
+```
+
+| Key | Feeds |
+|---|---|
+| `environment` | selects `api/environments/<value>/` **and** the app environment (accepts `stage`/`staging`/`production`/`prod`, case-insensitive) |
+| `token` | the `token` request header — a session secret |
+| `userCode` | the `user-code` header; must match the account the app is logged in as |
+| `deviceName` | `DEVICE_NAME` header |
+| `deviceId` | `DEVICE-ID` and `X-DEVICE-ID` headers |
+| `androidVersion` | `ANDROID_VERSION` header |
+
+`environment=` given this way also satisfies `$3`, so don't prompt for the
+environment as well. The others are only needed by a flow whose plan contains a
+`call-api` step; a UI-only flow ignores them entirely and must not prompt for
+them. Never echo `token` back to the user or write it into a report.
+
+Which runtime inputs a given environment actually requires is declared in
+`api/environments/<env>/headers.md`, not hardcoded here — check with
+`.claude/skills/apiCall/scripts/api_action.sh doctor <environment>`, which
+prints `MISSING_RUNTIME_INPUTS=` for anything absent. If a `call-api` step runs
+without them, it fails **before** sending a request, naming the missing input —
+it never sends an empty token and lets a `401` masquerade as a backend fault.
+
+Pass them through to `flow-runner`, which forwards them to every `run-plan`
+call as `--api-env`/`--token`/`--device-name`/`--device-id`/`--android-version`
+(`userCode` travels as the existing `--user-code`).
+
 Additionally, anywhere after `$3`, `--mobile "<number>"` and/or `--password
 "<pass>"` may be given (parsed from the raw argument text, same style as
 `create_flow`'s `--flag "value"` parsing) to supply a credential value

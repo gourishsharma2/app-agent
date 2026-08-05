@@ -1,4 +1,5 @@
 {
+  "schemaVersion": 2,
   "flowName": "gpsListingFlow",
   "sourceDoc": "flow/gpsListingFlow.md",
   "referencedDocs": [
@@ -24,7 +25,7 @@
       ],
       "knownNonBug": false,
       "retries": 2,
-      "notes": "Chip label prefixes only \u2014 counts validated against the API in step 3. Verified live 3 Aug 2026 that the chip row contains exactly three clickable chips and no filter icon/Offline option. settleMs covers the fleet list load. Selector is the exact XML-encoded content-desc \"Vehicles&#10;Tab 2 of 4\" because the bare string \"Vehicles\" is ambiguous and resolved to the wrong element (Loads tab) in a raw substring match."
+      "notes": "Unchanged from prior plan step 1. Re-verified live 5 Aug 2026: tap on content-desc \"Vehicles\\nTab 2 of 4\" (bounds [336,327][672,471]) opens the fleet list with all three chips visible, no filter icon/Offline option."
     },
     {
       "id": 2,
@@ -37,7 +38,7 @@
       "assertions": [],
       "knownNonBug": false,
       "retries": 1,
-      "notes": "No UI interaction. Binds api.running / api.stoppage / api.noInfo. A non-2xx status fails the step, which is why assertions is empty \u2014 the status check IS the assertion. See api/contracts/getAllFilterCount.md."
+      "notes": "Unchanged from prior plan step 2. Re-verified live 5 Aug 2026 (WE25622): api.running=1, api.stoppage=1, api.noInfo=80, api.success=true \u2014 a genuinely different fleet state than the prior 0-running verification."
     },
     {
       "id": 3,
@@ -49,8 +50,244 @@
       ],
       "knownNonBug": false,
       "retries": 1,
-      "notes": "No IF guard: verified live 3 Aug 2026 that the Running chip renders 'Running (0)' when nothing is running, so an API-sourced expectation is correct at zero too \u2014 this assertion now runs unconditionally instead of being skipped. api.noInfo / the All chip are deliberately not asserted here \u2014 the app exposes no No-Info chip, and the All chip is not the sum of running+stoppage+noInfo (verified live: 0+2+79=81 vs All=92)."
+      "notes": "Unchanged from prior plan step 3. Re-verified live 5 Aug 2026: 'Running (1)' and 'Stopped (1)' both matched exactly, confirming the API-sourced assertion holds unconditionally at a non-zero running count too, not just at zero."
+    },
+    {
+      "id": 4,
+      "title": "Step 4 \u2014 tap Running chip",
+      "action": {
+        "type": "tap",
+        "selector": "Running ("
+      },
+      "assertions": [],
+      "knownNonBug": false,
+      "retries": 2,
+      "notes": "Unchanged from prior plan step 4. Always taps Running first regardless of api.running."
+    },
+    {
+      "id": 5,
+      "title": "Step 4 \u2014 fall back to Stopped chip and fetch its vehicles (no running vehicles)",
+      "when": {
+        "path": "api.running",
+        "op": "==",
+        "value": 0
+      },
+      "action": [
+        {
+          "type": "tap",
+          "selector": "Stopped ("
+        },
+        {
+          "type": "call-api",
+          "endpoint": "vehiclesStatic?filter=STOPPAGE&pageNo=0&pageSize=10",
+          "bind": "api"
+        }
+      ],
+      "assertions": [],
+      "knownNonBug": false,
+      "retries": 2,
+      "notes": "Unchanged from prior plan step 5. SKIPPED this run (api.running=1, not 0) \u2014 not re-exercised this pass, retains its prior live verification from the 0-running run."
+    },
+    {
+      "id": 6,
+      "title": "Step 4 \u2014 fetch vehicles for the Running filter",
+      "when": {
+        "path": "api.running",
+        "op": ">",
+        "value": 0
+      },
+      "action": {
+        "type": "call-api",
+        "endpoint": "vehiclesStatic?filter=DRIVING&pageNo=0&pageSize=10",
+        "bind": "api"
+      },
+      "assertions": [],
+      "knownNonBug": false,
+      "retries": 2,
+      "notes": "Unchanged from prior plan step 6, now newly live-verified 5 Aug 2026 (previously only the mirror-image STOPPAGE branch had been exercised): api.running=1, so this branch ran; returned api.list.0.vehicleNumber=NL01ACC3479, api.totalCount=1."
+    },
+    {
+      "id": 7,
+      "title": "Step 4 \u2014 verify first card matches first API vehicle",
+      "action": null,
+      "assertions": [
+        "${api.list.0.vehicleNumber}"
+      ],
+      "knownNonBug": false,
+      "retries": 1,
+      "notes": "Unchanged from prior plan step 7. Live-verified 5 Aug 2026: first visible card showed NL01ACC3479, matching api.list.0.vehicleNumber from the filter=DRIVING response exactly (first time this branch's output was cross-checked against the screen)."
+    },
+    {
+      "id": 8,
+      "title": "Step 5 \u2014 card layout (always-on elements)",
+      "action": null,
+      "assertions": [
+        "kmph",
+        "FasTag",
+        "Check balance",
+        "Play route",
+        "Route History",
+        "Share",
+        "Parking alarm"
+      ],
+      "knownNonBug": false,
+      "retries": 1,
+      "notes": "CHANGED vs prior plan step 8: 'Save location' removed from this always-on list \u2014 it is now stopped-vehicle-only (see step 11 below). Remaining assertions live-verified 5 Aug 2026 against a running vehicle's card."
+    },
+    {
+      "id": 9,
+      "title": "Step 5 \u2014 ignition shows ON while running",
+      "when": {
+        "path": "api.running",
+        "op": ">",
+        "value": 0
+      },
+      "action": null,
+      "assertions": [
+        "ON"
+      ],
+      "knownNonBug": false,
+      "retries": 1,
+      "notes": "Unchanged from prior plan step 9, now confirmed live 5 Aug 2026 (previously unverified/skipped for lack of a running vehicle): 'ON' found in the card's content-desc while the Running chip was active."
+    },
+    {
+      "id": 10,
+      "title": "Step 5 \u2014 ignition shows OFF while stopped",
+      "when": {
+        "path": "api.running",
+        "op": "==",
+        "value": 0
+      },
+      "action": null,
+      "assertions": [
+        "OFF"
+      ],
+      "knownNonBug": false,
+      "retries": 1,
+      "notes": "Unchanged from prior plan step 10. Not re-exercised this run (api.running=1) \u2014 retains its prior live verification against the stopped-vehicle card."
+    },
+    {
+      "id": 11,
+      "title": "Step 5 \u2014 Save location shown only while stopped",
+      "when": {
+        "path": "api.running",
+        "op": "==",
+        "value": 0
+      },
+      "action": null,
+      "assertions": [
+        "Save location"
+      ],
+      "knownNonBug": false,
+      "retries": 1,
+      "notes": "NEW step, mirroring the id-9/id-10 when-guard pattern for ignition ON/OFF. Live-verified 5 Aug 2026: absent from a running vehicle's card (contains-check NOT FOUND, confirmed via live accessibility XML + 5 scroll-to attempts \u2014 not off-screen, not lazily rendered). Present on the stopped-vehicle card per prior verification. This when==0 branch itself was not re-exercised this pass (no stopped-vehicle card was open) \u2014 retains its prior live verification."
+    },
+    {
+      "id": 12,
+      "title": "Step 6 \u2014 Play Route opens the map",
+      "action": {
+        "type": "tap",
+        "selector": "Play route"
+      },
+      "screenMarker": "Google Map",
+      "assertions": [
+        "Google Map",
+        "Date range",
+        "${api.list.0.vehicleNumber}"
+      ],
+      "knownNonBug": false,
+      "retries": 1,
+      "notes": "Unchanged from prior plan step 11 (renumbered only). Re-verified live 5 Aug 2026 against the running vehicle: lands on the route/report screen with 'Google Map', 'Date range', and NL01ACC3479 all present."
+    },
+    {
+      "id": 13,
+      "title": "Step 7 \u2014 back from Play Route",
+      "action": {
+        "type": "back"
+      },
+      "screenMarker": "Stopped (",
+      "assertions": [
+        "Running (",
+        "Stopped (",
+        "${api.list.0.vehicleNumber}"
+      ],
+      "knownNonBug": false,
+      "retries": 1,
+      "notes": "Unchanged from prior plan step 12 (renumbered only) \u2014 action/assertions not modified pending human review. FLAGGED 5 Aug 2026: this pass's live run hit a one-time promo dialog ('Don't go away just yet!' / 'Go back' / 'Play Video') instead of returning directly to the listing, contradicting this step's current assumption. It did NOT recur on the equivalent back in step 15, suggesting a first-use prompt rather than a per-navigation one. Not baked into this action as an unconditional extra tap \u2014 a single run cannot establish whether it is deterministic, session-scoped, or vehicle-state-scoped. Needs a human decision (same open-question posture as step 17's coordinate-tap gap)."
+    },
+    {
+      "id": 14,
+      "title": "Step 8 \u2014 Route History opens the map",
+      "action": {
+        "type": "tap",
+        "selector": "Route History"
+      },
+      "screenMarker": "Google Map",
+      "assertions": [
+        "Google Map",
+        "Date range",
+        "${api.list.0.vehicleNumber}"
+      ],
+      "knownNonBug": false,
+      "retries": 1,
+      "notes": "Unchanged from prior plan step 13 (renumbered only). Re-verified live 5 Aug 2026: identical screen to step 12 (Play route)."
+    },
+    {
+      "id": 15,
+      "title": "Step 9 \u2014 back from Route History",
+      "action": {
+        "type": "back"
+      },
+      "screenMarker": "Stopped (",
+      "assertions": [
+        "Running (",
+        "Stopped (",
+        "${api.list.0.vehicleNumber}"
+      ],
+      "knownNonBug": false,
+      "retries": 1,
+      "notes": "Unchanged from prior plan step 14 (renumbered only). Re-verified live 5 Aug 2026: returned directly to the listing, no dialog this time (contrast with step 13 above) \u2014 supports the 'one-time prompt' theory for that earlier divergence."
+    },
+    {
+      "id": 16,
+      "title": "Step 10 \u2014 open Share bottom sheet",
+      "action": {
+        "type": "tap",
+        "selector": "Share"
+      },
+      "assertions": [
+        "Share truck live location",
+        "Share via WhatsApp"
+      ],
+      "knownNonBug": false,
+      "retries": 1,
+      "notes": "Unchanged from prior plan step 15 (renumbered only). Re-verified live 5 Aug 2026."
+    },
+    {
+      "id": 17,
+      "title": "Step 10 \u2014 close Share bottom sheet",
+      "action": {
+        "type": "tap",
+        "x": 1254,
+        "y": 210
+      },
+      "assertions": [
+        "Stopped ("
+      ],
+      "knownNonBug": false,
+      "retries": 1,
+      "notes": "Unchanged from prior plan step 16 (renumbered only) \u2014 still no accessible label on the close button, same known gap flagged previously. Re-verified live 5 Aug 2026: coordinate tap dismissed the sheet, 'Stopped (' found back on the listing."
+    },
+    {
+      "id": 18,
+      "title": "Step 11 \u2014 last vehicle card matches the backend's last vehicle",
+      "action": null,
+      "assertions": [
+        "${api.list.0.vehicleNumber}"
+      ],
+      "knownNonBug": false,
+      "retries": 1,
+      "notes": "Index recompiled this pass: prior plan step 17 had N=1 (fixed against Stopped-filter data, totalCount=2). This run's active filter was Running (totalCount=1), so N=0 \u2014 api.list.0.vehicleNumber=NL01ACC3479, confirmed on screen. Reuses api.list from step 6 (DRIVING branch). Index MUST be re-verified/recompiled whenever the active filter's vehicle count changes (see flow doc's own caveat)."
     }
-  ],
-  "schemaVersion": 2
+  ]
 }

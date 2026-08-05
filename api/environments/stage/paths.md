@@ -12,6 +12,7 @@ Only the fenced ```properties block is parsed.
 fetchUserDetail   = http://ums.prod-we.com/ums/v2/user/fetchDetail
 login             = /shield/admin/v3/login
 getAllFilterCount = /argus/app/vehicles/getAllFilterCount
+vehiclesStatic    = /rest/argus/app/vehicles/static
 ```
 
 Kept in step with `../production/paths.md`, since a key defined for only one

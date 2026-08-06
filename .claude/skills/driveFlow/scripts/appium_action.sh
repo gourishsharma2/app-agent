@@ -112,6 +112,28 @@ get_window_size() {
   curl -s "$APPIUM_URL/session/$session_id/window/rect" | python3 -c "import json,sys; v=json.load(sys.stdin)['value']; print(v['width'], v['height'])"
 }
 
+# text_landed <text> — reads a page source on stdin, exits 0 if <text>
+# actually landed in the typed field. A masked (password) field never
+# exposes its literal text to the accessibility tree even when typing
+# worked correctly (node marked password="true", text rendered as
+# asterisks) — falls back to comparing that masked value's character count
+# against <text>'s length instead of requiring an exact substring match.
+text_landed() {
+  python3 -c '
+import re, sys
+text = sys.argv[1]
+page = sys.stdin.read()
+if text in page:
+    sys.exit(0)
+for line in page.splitlines():
+    if "password=\"true\"" in line:
+        m = re.search(r"text=\"([^\"]*)\"", line)
+        if m and len(m.group(1)) == len(text):
+            sys.exit(0)
+sys.exit(1)
+' "$1"
+}
+
 do_swipe() {
   local x1="$2" y1="$3" x2="$4" y2="$5" duration="${6:-450}"
   local device_serial
@@ -212,7 +234,28 @@ case "$CMD" in
     [[ -n "$TEXT" ]] || fail "Usage: appium_action.sh type <text>"
     DEVICE_SERIAL="$(running_emulator)"
     [[ -n "$DEVICE_SERIAL" ]] || fail "No running emulator detected (adb devices)."
-    adb -s "$DEVICE_SERIAL" shell input text "$TEXT"
+    SESSION_ID="$(resolve_session_id)"
+    # adb shell input text fires immediately with no guarantee the target
+    # field is actually focus-ready yet (e.g. right after a screen-navigation
+    # tap) — a slow transition can drop the first keystroke. Read back the
+    # live accessibility tree after typing and retry (clearing first) rather
+    # than trusting the injection blindly.
+    MAX_TYPE_ATTEMPTS=3
+    ATTEMPT=1
+    while :; do
+      adb -s "$DEVICE_SERIAL" shell input text "$TEXT"
+      sleep 0.5
+      PAGE="$(get_page_source "$SESSION_ID")"
+      echo "$PAGE" | text_landed "$TEXT" && break
+      [[ $ATTEMPT -lt $MAX_TYPE_ATTEMPTS ]] || fail "Typed text did not match live field content after $MAX_TYPE_ATTEMPTS attempts (target field may not have been focused/ready in time): \"$TEXT\""
+      CLEAR_COUNT=$(( ${#TEXT} * 2 > 30 ? ${#TEXT} * 2 : 30 ))
+      CLEAR_KEYS="123"
+      for ((i = 0; i < CLEAR_COUNT; i++)); do CLEAR_KEYS="$CLEAR_KEYS 67"; done
+      # shellcheck disable=SC2086
+      adb -s "$DEVICE_SERIAL" shell input keyevent $CLEAR_KEYS
+      sleep 0.3
+      ATTEMPT=$((ATTEMPT + 1))
+    done
     ;;
 
   back)

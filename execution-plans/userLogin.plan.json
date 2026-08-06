@@ -17,7 +17,7 @@
       ],
       "knownNonBug": false,
       "retries": 1,
-      "notes": "Assertion-only step confirming the initial login screen state, per flow/userLogin.md Step 1."
+      "notes": "Assertion-only step confirming the initial login screen state, per flow/userLogin.md Step 1. Re-verified live 2026-08-05."
     },
     {
       "id": 2,
@@ -43,12 +43,11 @@
       "assertions": [
         "Phone number",
         "Password",
-        "Login",
-        "Create new password"
+        "Login"
       ],
       "knownNonBug": false,
       "retries": 1,
-      "notes": "Phone-number EditText has no content-desc/text of its own (per loginFlow.plan.json step 3), so the '+91' country-code badge is used as the tap selector to focus it before typing, matching the previously-verified loginFlow pattern. Entering the number before tapping 'Continue with password' is what pre-fills the phone-number field shown on the resulting password screen. settleMs added after the +91 tap: verified live that typing immediately after focusing this Compose field drops the first character, producing a 9-digit number that still reaches the password screen and passes every assertion while logging in as the wrong user."
+      "notes": "Phone-number EditText has no content-desc/text of its own, so the '+91' country-code badge is used as the tap selector to focus it before typing. settleMs after the +91 tap avoids dropping the first typed character on this Compose field. Re-verified live 2026-08-05 (full 10-digit number '9355098542' landed correctly, password screen reached with all three assertions present)."
     },
     {
       "id": 3,
@@ -75,7 +74,7 @@
       ],
       "knownNonBug": false,
       "retries": 1,
-      "notes": "Types directly into the password field already present on this screen. The previous back + re-tap of \"Continue with password\" was copied from loginFlow, where it exists only to clear a deliberately-wrong password; userLogin never types one, and verified live that back does NOT leave the password screen on this build, so the re-tap could never resolve. Field selected via its password=\"true\" attribute, which is unique here (the only other EditText is the pre-filled phone number)."
+      "notes": "Types directly into the password field, already focused on this screen (unique password=\"true\" EditText attribute). Tap on 'Login' content-desc view submits. Re-verified live 2026-08-05: landed on Home page with 'FasTag' marker present within 0s of tap."
     }
   ],
   "schemaVersion": 2

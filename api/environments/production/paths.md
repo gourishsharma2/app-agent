@@ -9,6 +9,7 @@ Only the fenced ```properties block is parsed.
 fetchUserDetail   = http://ums.prod-we.com/ums/v2/user/fetchDetail
 login             = /shield/admin/v3/login
 getAllFilterCount = /argus/app/vehicles/getAllFilterCount
+vehiclesStatic    = /rest/argus/app/vehicles/static
 ```
 
 `fetchUserDetail` is an absolute URL because UMS lives on a different host from

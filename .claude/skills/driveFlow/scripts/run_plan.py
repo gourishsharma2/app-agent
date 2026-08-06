@@ -74,6 +74,8 @@ SETTLE_SECONDS = 1.0
 MARKER_POLL_TIMEOUT = 10
 MARKER_POLL_INTERVAL = 1.0
 RETRY_SETTLE_SECONDS = 1.5
+MAX_TYPE_ATTEMPTS = 3
+TYPE_VERIFY_SETTLE_SECONDS = 0.5
 BOUNDS_RE = re.compile(r'bounds="(\[-?\d+,-?\d+\]\[-?\d+,-?\d+\])"')
 
 
@@ -175,6 +177,38 @@ class PlanExecutor:
     def swipe(self, x1, y1, x2, y2, duration=450):
         adb(self.device_serial, "input", "swipe", str(x1), str(y1), str(x2), str(y2), str(duration))
 
+    def type_verified(self, text):
+        """adb shell input text fires immediately with no guarantee the
+        target field is actually focus-ready yet (e.g. right after a
+        screen-navigation tap) — a slow transition can drop the first
+        keystroke. Read back the live accessibility tree after typing and
+        retry (clearing first) rather than trusting the injection blindly."""
+        for attempt in range(1, MAX_TYPE_ATTEMPTS + 1):
+            adb(self.device_serial, "input", "text", text)
+            time.sleep(TYPE_VERIFY_SETTLE_SECONDS)
+            if self._typed_text_landed(self.source(), text):
+                return
+            if attempt == MAX_TYPE_ATTEMPTS:
+                raise Divergence("type-verify-failed", text)
+            clear_count = max(30, len(text) * 2)
+            adb(self.device_serial, "input", "keyevent", "123", *(["67"] * clear_count))
+            time.sleep(0.3)
+
+    def _typed_text_landed(self, page, text):
+        if text in page:
+            return True
+        # A masked (password) field never exposes its literal text to the
+        # accessibility tree, even when typing worked correctly — the node
+        # is marked password="true" and its text is rendered as asterisks.
+        # Fall back to comparing that masked value's character count against
+        # the intended text's length instead of an exact match.
+        for line in page.splitlines():
+            if 'password="true"' in line:
+                m = re.search(r'text="([^"]*)"', line)
+                if m and len(m.group(1)) == len(text):
+                    return True
+        return False
+
     def directional_swipe(self, direction):
         w, h = self.window_rect()
         cx, cy = w // 2, h // 2
@@ -236,7 +270,7 @@ class PlanExecutor:
                 self.tap_xy(x, y)
 
         elif a_type == "type":
-            adb(self.device_serial, "input", "text", action["text"])
+            self.type_verified(action["text"])
 
         elif a_type == "back":
             adb(self.device_serial, "input", "keyevent", "4")

@@ -119,6 +119,18 @@ class RuntimeContext:
 
         A `data` field name colliding with an envelope field wins — `data` is
         the payload under test.
+
+        Merges into whatever is already bound at `namespace`, rather than
+        replacing it outright. Two `CALL_API` steps that deliberately share a
+        bind namespace (e.g. a flow's `getAllFilterCount` followed later by a
+        conditional `vehiclesStatic` call, both bound to `api`) are a common,
+        correct pattern — a flow reads `api.running` from the first call and
+        `api.list` from the second in the same expression. A full replace
+        would silently erase `api.running` the moment the second call landed,
+        breaking any later step (including a sibling `IF`/`ENDIF` branch's own
+        guard) that still needs it. `_raw`/`_status`/`_elapsedMs`/`_url` and
+        any same-named field are overwritten with the newest call's value, as
+        expected; only fields unique to the earlier call survive untouched.
         """
         body = result.get("json")
         bound = {
@@ -139,7 +151,10 @@ class RuntimeContext:
             elif data is not None:
                 bound["data"] = data
 
-        self.data[namespace] = bound
+        existing = self.data.get(namespace)
+        merged = dict(existing) if isinstance(existing, dict) else {}
+        merged.update(bound)
+        self.data[namespace] = merged
         return bound
 
     # ---------------------------------------------------------- substitution
@@ -189,6 +204,28 @@ class RuntimeContext:
         if is_secret(path):
             return f"{path} = {REDACTED}"
         return f"{path} = {json.dumps(value) if not isinstance(value, str) else value}"
+
+    # ----------------------------------------------------------------- merge
+    def merge(self, other):
+        """Merges another `RuntimeContext`'s data into this one, namespace by
+        namespace — `other` wins on conflicts, but a namespace absent from
+        `other` survives untouched (the same "merge, don't replace" rule
+        `bind_response` follows, applied one level up).
+
+        Used to combine a freshly-seeded context (this invocation's explicit
+        `--mobile`/`--environment`/... inputs) with one loaded from a
+        persisted file (an earlier invocation's `call-api`/`set-context`
+        bindings on a resumed `--from-step` run) — a plain top-level replace
+        would let whichever context loads second erase the other's namespaces
+        outright, the exact bug `bind_response` had before it was fixed to
+        merge internally instead of replacing.
+        """
+        for key, value in other.data.items():
+            existing = self.data.get(key)
+            if isinstance(existing, dict) and isinstance(value, dict):
+                existing.update(value)
+            else:
+                self.data[key] = value
 
     # ---------------------------------------------------------- persistence
     def save(self, path):

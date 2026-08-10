@@ -12,7 +12,11 @@ happen anywhere in this file — that's the entire point of it. It prints
 exactly one `PLAN_RESULT_JSON=<...>` line so the calling agent can parse the
 outcome without re-deriving it, and leaves the Appium session open on exit
 (divergence or clean finish) so a recovery pass or a `close-session` call can
-still use it.
+still use it. The runtime context (api.*/flow.*/derived.* — see
+context_store.py) is likewise persisted to `.plan_context.json` next to the
+session state and reloaded whenever a `--from-step N` call reuses that same
+session, so a resumed/recovery run sees the same values a single unbroken
+process would have — not an empty context past the resume point.
 
 `${...}` tokens anywhere in a step's strings are resolved against the runtime
 context (see .claude/skills/apiCall/scripts/context_store.py) at the moment
@@ -69,6 +73,21 @@ API_ROOT = os.path.join(PROJECT_ROOT, "api")
 # token having to travel on a command line where `ps` would expose it.
 API_CONTEXT_FILE = os.path.join(
     PROJECT_ROOT, ".claude", "skills", "apiCall", ".context.json")
+
+# Written/read by THIS script only, next to the Appium session-id state file
+# it already shares across invocations of the same run. `run()` executes in
+# one process per invocation, so a plan driven straight through in one call
+# never needs this — the context stays in memory the whole time. It only
+# matters for a **resumed** `--from-step N` call (a local-recovery pass, or a
+# divergence retry) reusing an already-open session in a fresh process: that
+# process would otherwise start from an empty api.*/flow.*/derived.*
+# namespace, so any `when` guard or `${api...}` token past the resume point
+# fails as "not in context" even though the earlier call-api/set-context steps
+# genuinely bound it moments ago in the prior process. Deleted alongside the
+# session state file on `close-session` — see appium_action.sh — so a brand
+# new session never inherits a stale one.
+PLAN_CONTEXT_FILE = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", ".plan_context.json")
 
 SETTLE_SECONDS = 1.0
 MARKER_POLL_TIMEOUT = 10
@@ -163,6 +182,31 @@ class PlanExecutor:
                     return self.bounds_center(m.group(1))
         return None
 
+    def _resolve_tap_xy(self, action, page_hint):
+        """Resolves a tap/double-tap/long-press action to (x, y).
+
+        Most actions carry a text `selector`, resolved against the live
+        accessibility tree. A coordinate action (`x`/`y` given directly, no
+        `selector`) is the documented fallback for an element with no
+        accessible label at all — see flow/gpsListingFlow.md's Step 10 notes
+        on the Share sheet's close button — and must be tapped as-is, with no
+        selector lookup. Raises a clear Divergence for a genuinely malformed
+        action instead of the unhandled KeyError this used to throw when
+        `action["selector"]` was accessed unconditionally.
+        """
+        if "x" in action and "y" in action:
+            return action["x"], action["y"]
+        selector = action.get("selector")
+        if not selector:
+            raise Divergence(
+                "tap-malformed",
+                "action needs either `selector` or both `x` and `y`")
+        page = page_hint or self.source()
+        xy = self.find_selector(page, selector)
+        if xy is None:
+            raise Divergence("selector-not-found", selector)
+        return xy
+
     def tap_xy(self, x, y):
         http("POST", f"{self.appium_url}/session/{self.session_id}/actions", {
             "actions": [{"type": "pointer", "id": "finger1", "parameters": {"pointerType": "touch"},
@@ -241,18 +285,11 @@ class PlanExecutor:
         a_type = action["type"]
 
         if a_type == "tap":
-            page = page_hint or self.source()
-            xy = self.find_selector(page, action["selector"])
-            if xy is None:
-                raise Divergence("selector-not-found", action["selector"])
+            xy = self._resolve_tap_xy(action, page_hint)
             self.tap_xy(*xy)
 
         elif a_type in ("double-tap", "long-press"):
-            page = page_hint or self.source()
-            xy = self.find_selector(page, action["selector"])
-            if xy is None:
-                raise Divergence("selector-not-found", action["selector"])
-            x, y = xy
+            x, y = self._resolve_tap_xy(action, page_hint)
             if a_type == "long-press":
                 duration = action.get("durationMs", 800)
                 http("POST", f"{self.appium_url}/session/{self.session_id}/actions", {
@@ -668,6 +705,14 @@ def main():
     with open(plan_path) as f:
         plan = json.load(f)
 
+    # Whether this invocation is continuing an already-open session (a
+    # resumed --from-step call) rather than starting a fresh one — decides
+    # below whether PLAN_CONTEXT_FILE's api.*/flow.*/derived.* namespaces
+    # should be carried in. Checked before the open/reuse block further down
+    # touches state_file, so it reflects what was true when this process
+    # started, not whatever this same call does to it a few lines later.
+    session_reused = os.path.exists(state_file)
+
     if API_AVAILABLE:
         context = context_store.seed(
             runtime_inputs=runtime_inputs,
@@ -688,6 +733,18 @@ def main():
         if carried:
             log("run-plan: carried runtime input(s) from the apiCall context: "
                 + ", ".join(sorted(carried)))
+
+        # A resumed run reuses the earlier invocation's whole context — every
+        # namespace a call-api/set-context step bound, not just runtime.* —
+        # so a `when` guard or `${api...}` token past the resume point sees
+        # the same values it would have if the flow had never left one
+        # process. This invocation's own explicit inputs (already applied to
+        # `context` above) still win on conflict, via merge()'s "other wins"
+        # rule with `context` passed as `other`.
+        if session_reused:
+            carried_over = context_store.RuntimeContext.load(PLAN_CONTEXT_FILE)
+            carried_over.merge(context)
+            context = carried_over
     else:
         context = _FallbackContext({"mobileNumber": mobile_number,
                                     "password": password,
@@ -710,6 +767,11 @@ def main():
     except urllib.error.URLError as e:
         result = {"flow": plan.get("flowName"), "overallStatus": "DIVERGED",
                   "stepsRun": [], "divergedAt": {"stepId": from_step, "reason": "appium-unreachable", "detail": str(e)}}
+
+    # Persist regardless of pass/diverge/error — a divergence is exactly when
+    # a recovery pass is about to resume with --from-step and needs this.
+    if API_AVAILABLE:
+        context.save(PLAN_CONTEXT_FILE)
 
     print("PLAN_RESULT_JSON=" + json.dumps(result))
     sys.exit(0 if result["overallStatus"] == "PASS" else 1)

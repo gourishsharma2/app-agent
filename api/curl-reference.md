@@ -46,3 +46,34 @@ curl -sS -X GET \
   -H 'Cache-Control: no-cache' \
   -H 'service: OperatorApp'
 ```
+
+## fastagHomeComponent
+
+```bash
+curl -sS -X POST \
+  'https://wheelseye.com/rest/cyborg/app/fastag/home/component' \
+  -H 'Content-Type: application/json' \
+  -H 'token: <TOKEN>' \
+  -H 'user-code: <USER_CODE>' \
+  -H 'DEVICE_NAME: <DEVICE_NAME>' \
+  -H 'DEVICE-ID: <DEVICE_ID>' \
+  -H 'X-DEVICE-ID: <DEVICE_ID>' \
+  -H 'ANDROID_VERSION: <ANDROID_VERSION>' \
+  -H 'X-APP-VERSION: 24.1.0' \
+  -H 'X-APP-NAME: 24.1.0' \
+  -H 'locale: en' \
+  -H 'X-APP-PLATFORM: android' \
+  -H 'Cache-Control: no-cache' \
+  -H 'service: OperatorApp' \
+  -d '{
+    "component": "VEHICLE_LISTING",
+    "userType": "HAS_FASTAG",
+    "params": {
+      "spId": 13,
+      "pageNo": 1,
+      "pageSize": 5,
+      "searchText": "",
+      "service": null
+    }
+  }'
+```

@@ -75,6 +75,17 @@ adding one line to `paths.md` — no script change. Runtime values (`token`,
 pairs on the `/run` line, are never committed, and are redacted from every log
 and report. Full detail: `.claude/skills/apiCall/SKILL.md` and `api/README.md`.
 
+**A raw `curl` a user pastes while authoring/updating a flow (`/create_flow`,
+`/update_flow`) never goes into the flow doc itself** — route it through this
+same API layer instead, exactly as `flow/gpsListingFlow.md` /
+`tests/VerifyGpsListing.md` already do for `getAllFilterCount` and
+`vehiclesStatic`: add `key = /path` to `paths.md` (both environments), any
+new headers to `headers.md`, the curl itself to `api/curl-reference.md`, and
+a response-shape doc to `api/contracts/<key>.md` — then reference it from the
+flow doc only as `CALL_API <key>` (plus `IF api.x ... ENDIF` where needed). A
+flow doc stays free of curl text, URLs, and header names no matter what was
+pasted into the authoring conversation.
+
 **The one hard rule that matters most in this repo:** never hand-roll a raw `curl`/`adb`/`node` command for something these scripts already do, and issue every script call as its own single plain command — never wrapped in `$(...)`, `&&`, or chained with anything else. `.claude/settings.json` allowlists these scripts by their *exact literal path*, is committed and shared across everyone using this repo, and a wrapped/combined/hand-rolled invocation breaks that match and reintroduces a permission prompt for every future session, for every user. If a new capability is needed, add a subcommand to the relevant script rather than reaching for a one-off shell command. `.claude/settings.local.json` is per-machine and uncommitted — never rely on it for anything that needs to work for a teammate or a fresh session.
 
 ## Repo layout

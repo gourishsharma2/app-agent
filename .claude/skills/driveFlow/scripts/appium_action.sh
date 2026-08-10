@@ -545,6 +545,11 @@ print(json.dumps(out))
     SESSION_ID="$(resolve_session_id)"
     curl -s -X DELETE "$APPIUM_URL/session/$SESSION_ID" > /dev/null
     rm -f "$STATE_FILE"
+    # run_plan.py's per-run persisted context (api.*/flow.*/derived.* bound by
+    # call-api/set-context steps, carried across a resumed --from-step call
+    # reusing this same session) — removed alongside the session itself so a
+    # future unrelated session never starts by loading this one's leftovers.
+    rm -f "$SCRIPT_DIR/../.plan_context.json" "$SCRIPT_DIR/../.plan_context.json.tmp"
     ;;
 
   *)

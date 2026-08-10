@@ -136,6 +136,15 @@ result) with the target path and every screenshot discovered in step 2, plus:
 - Never invent on-screen text, steps, or elements beyond what's visible in
   the screenshots — same hard rule the agent already follows. This default
   changes when `steps` was supplied — see immediately below.
+- **If the user's narrative (`--steps`/`--notes`, or free text in this
+  conversation) includes a raw `curl` command, it never gets pasted into
+  `flow/<flowName>.md`.** Route it through `api/` instead, the same way
+  `flow/gpsListingFlow.md` handles `getAllFilterCount`/`vehiclesStatic` — add
+  the path to `api/environments/<env>/paths.md`, any new headers to
+  `headers.md`, the curl itself to `api/curl-reference.md`, a response-shape
+  doc to `api/contracts/<key>.md`, and write only `CALL_API <key>` (plus
+  `IF api.x ... ENDIF` if the narrative branches on the response) into the
+  step being authored. See CLAUDE.md's "API-driven execution" section.
 
 **Handling `steps` (a user-supplied narrative takes priority over screenshot content):**
 If `steps` was supplied, it — not the screenshots — is the source of truth

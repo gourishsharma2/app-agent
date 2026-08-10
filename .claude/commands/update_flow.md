@@ -174,6 +174,14 @@ changes yet. Give it:
   independently confirmable from an existing or new screenshot) as
   provisional, to be proven/corrected during step 6's live pass — same
   convention as `/create_flow`.
+- **If the update narrative (`--steps`, or free text in this conversation)
+  includes a raw `curl` command, it never gets pasted into the draft doc.**
+  Route it through `api/` instead, exactly as `/create_flow` does (see its
+  spec and CLAUDE.md's "API-driven execution" section): path into
+  `api/environments/<env>/paths.md`, headers into `headers.md`, the curl
+  itself into `api/curl-reference.md`, response shape into
+  `api/contracts/<key>.md`, and the step itself gets only `CALL_API <key>`
+  (plus an `IF`/`ENDIF` if it branches on the response).
 
 Wait for it to confirm the scratch file was written before continuing.
 

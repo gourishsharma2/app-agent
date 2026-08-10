@@ -6,10 +6,11 @@ URL.
 Only the fenced ```properties block is parsed.
 
 ```properties
-fetchUserDetail   = http://ums.prod-we.com/ums/v2/user/fetchDetail
-login             = /shield/admin/v3/login
-getAllFilterCount = /argus/app/vehicles/getAllFilterCount
-vehiclesStatic    = /rest/argus/app/vehicles/static
+fetchUserDetail     = http://ums.prod-we.com/ums/v2/user/fetchDetail
+login               = /shield/admin/v3/login
+getAllFilterCount   = /argus/app/vehicles/getAllFilterCount
+vehiclesStatic      = /rest/argus/app/vehicles/static
+fastagHomeComponent = /rest/cyborg/app/fastag/home/component
 ```
 
 `fetchUserDetail` is an absolute URL because UMS lives on a different host from

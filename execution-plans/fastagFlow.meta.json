@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 2,
+  "planVersion": 6,
+  "docHashes": {
+    "flow/fastagFlow.md": "sha256:4f66732993b1af8cd66fb36a755e0997d1a55f25ab174b6bd2d5b7d70ee5eaf3"
+  },
+  "screenshotHashes": {
+    "screenshots or figma Links/fastagFlow/Step 1.png": "sha256:d29a0ec6e5f1e9a20fa3616e86a518653d950257ccccde967c3b47a6cfba64c7"
+  },
+  "appVersion": "com.wheelseyeoperator.debug@24.1.0(242410)",
+  "generatedAt": "2026-08-10T11:37:00Z"
+}

@@ -48,6 +48,12 @@ distinct runtime input and point `X-DEVICE-ID` at it. That is a one-line change
 in this file — no script change — which is the reason runtime headers are
 declared rather than hardcoded.
 
+`fastagHomeComponent`'s captured curl showed a real device sending different
+values for the two headers (`DEVICE-ID` a UUID, `X-DEVICE-ID` a build
+fingerprint) — noted here rather than split, since `/run`'s interface only
+exposes one `deviceId=` input (see `.claude/commands/run.md`) and there's no
+evidence yet that this endpoint actually validates the fingerprint strictly.
+
 ## Why `token` and `user-code` are never static
 
 `token` is a session secret; `user-code` selects the operator account the

@@ -1,0 +1,119 @@
+{
+  "schemaVersion": 2,
+  "flowName": "fastagFlow",
+  "sourceDoc": "flow/fastagFlow.md",
+  "referencedDocs": [
+    "flow/userLogin.md"
+  ],
+  "appPackage": "com.wheelseyeoperator.debug",
+  "appActivity": "com.wheelseyeoperator.MainActivity",
+  "steps": [
+    {
+      "id": 1,
+      "title": "FasTag tab",
+      "action": {
+        "type": "tap",
+        "selector": "FasTag&#10;Tab 1 of 4"
+      },
+      "screenMarker": "FasTag",
+      "assertions": [
+        "FasTag",
+        "Vehicles"
+      ],
+      "knownNonBug": false,
+      "retries": 2,
+      "notes": "Re-verified live 10 Aug 2026 (WE25622): tap content-desc \"FasTag&#10;Tab 1 of 4\" (bounds [0,327][336,471]), next to Vehicles tab (bounds [336,327][672,471]). Opens/confirms FasTag home screen; both assertions found. App was already on the FasTag screen at session start (noReset) -- tap is idempotent."
+    },
+    {
+      "id": 2,
+      "title": "All bank FASTag recharge section",
+      "action": null,
+      "assertions": [
+        "All bank FASTag recharge",
+        "Recharge"
+      ],
+      "knownNonBug": false,
+      "retries": 1,
+      "notes": "Same screen as step 1, no action. Re-verified live 10 Aug 2026: both content-desc \"All bank FASTag recharge\" section and \"Recharge\" button present."
+    },
+    {
+      "id": 3,
+      "title": "Buy new Tag / status chip / My Refunds / monthly Debit chip",
+      "action": null,
+      "assertions": [
+        "Buy new Tag",
+        "My Refunds"
+      ],
+      "knownNonBug": false,
+      "retries": 1,
+      "notes": "Same screen as step 1, no action. The second status chip's own text is deliberately not asserted -- confirmed live 10 Aug 2026 (WE25622) to flip between 'Activate 94' and 'Replace' within minutes on the same account, both real/reproducible observations. Asserting either specific label would make this step flaky; only the two stable chips ('Buy new Tag', 'My Refunds') are checked. Current month's debit chip ('Aug Debit') confirmed present but not asserted, same as before."
+    },
+    {
+      "id": 4,
+      "title": "Wallet Balance row",
+      "action": null,
+      "assertions": [
+        "Wallet Balance",
+        "Add"
+      ],
+      "knownNonBug": false,
+      "retries": 1,
+      "notes": "Same screen as step 1, no action. Re-verified live 10 Aug 2026: content-desc \"Wallet Balance\" row and \"Add\" button both present (balance value itself not asserted)."
+    },
+    {
+      "id": 5,
+      "title": "IDFC / Other tabs and IDFC FASTags list",
+      "action": null,
+      "assertions": [
+        "IDFC (",
+        "Other (",
+        "IDFC FASTags"
+      ],
+      "knownNonBug": false,
+      "retries": 1,
+      "notes": "Same screen as step 1, no action. Re-verified live 10 Aug 2026: \"IDFC (\" and \"Other (\" tab chips (only prefix asserted per doc) and \"IDFC FASTags\" section header all present."
+    },
+    {
+      "id": 6,
+      "title": "Fetch the FasTag home vehicle listing from the backend",
+      "action": {
+        "type": "call-api",
+        "endpoint": "fastagHomeComponent",
+        "bind": "api",
+        "method": "POST",
+        "body": {
+          "component": "VEHICLE_LISTING",
+          "userType": "HAS_FASTAG",
+          "params": {
+            "spId": 13,
+            "pageNo": 1,
+            "pageSize": 5,
+            "searchText": "",
+            "service": null
+          }
+        }
+      },
+      "assertions": [],
+      "knownNonBug": false,
+      "retries": 1,
+      "notes": "Live-verified 10 Aug 2026 (WE25622, production): HTTP 200, api.success=true, api.componentData.list.0.vehicleNumber=UP11Q1112. No literal 'api.success == true' assertion string -- assertions[] only does literal on-screen substring matching (comparators only work inside a step's 'when' predicate, per compilePlan SKILL.md); the call-api action itself already fails the step on a non-2xx/non-success response (expectStatus default: any 2xx), same convention as gpsListingFlow.plan.json's own call-api steps (assertions: [])."
+    },
+    {
+      "id": 7,
+      "title": "First IDFC vehicle from the API is present somewhere in the IDFC list",
+      "action": {
+        "type": "scroll-to",
+        "selector": "${api.componentData.list.0.vehicleNumber}",
+        "direction": "down",
+        "maxScrolls": 10,
+        "startHint": 2
+      },
+      "assertions": [
+        "${api.componentData.list.0.vehicleNumber}"
+      ],
+      "knownNonBug": false,
+      "retries": 1,
+      "notes": "Re-verified live 10 Aug 2026 (WE25622): api.componentData.list.0.vehicleNumber resolved to UP11Q1112, not visible on screen without scrolling (NOT FOUND via plain contains beforehand). scroll-to (down, in the IDFC FASTags section) found it after exactly 2 scrolls -- same count as the prior pass, confirming this is stable. The backend's pageNo=1 list order does not match the UI's render order; presence, not first-card position, is what this step checks."
+    }
+  ]
+}

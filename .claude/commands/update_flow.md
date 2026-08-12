@@ -32,11 +32,13 @@ requires an environment to already be running (same posture as
 
 1. **Flow name (mandatory)** — the first token, stripped of surrounding
    quotes/`@`/`[...]` the same way `/run`/`/create_flow` do. If nothing is
-   left, stop and report:
-   ```
-   Usage: /update_flow <flow_name> [screenshots-folder] [--steps "1. ... 3. insert: ... 5. remove"]
-   The flow name is mandatory.
-   ```
+   left, do not stop with a usage error — ask instead, the same way `/run`
+   asks for a missing argument:
+   1. Print exactly: `Which flow would you like to update?`
+   2. Discover and display flows using the same logic as `/list_flow` (glob
+      `flow/*.md` + `tests/**/*.md`, name = filename without `.md`, rendered
+      as the same markdown table).
+   3. Wait for the user's answer before continuing.
 2. **Everything after the first token** is optional, parsed the same
    flag-aware way as `/run`/`/create_flow`:
    - `--steps "..."` — the step-change narrative (see "Parsing the step
@@ -46,10 +48,14 @@ requires an environment to already be running (same posture as
    - A bare token with no `--` flags and no numbered-narrative shape is
      shorthand for the **screenshots folder** instead.
    - Both may be given together, in either order.
-3. If neither a screenshots folder nor `--steps` was given, stop and report:
-   ```
-   Nothing to update — give either an updated screenshots folder or --steps describing what changed.
-   ```
+3. If neither a screenshots folder nor `--steps` was given, do not stop with
+   an error — ask instead:
+   1. Print exactly: `What would you like to update? Give an updated screenshots folder path, or describe the step changes (e.g. "2. ..." or --steps "...").`
+   2. Wait for the user's answer, then parse it the same way step 2 above
+      parses this same optional text (a bare token/path → screenshots
+      folder; a numbered narrative or `--steps "..."` → steps).
+   3. If the answer still resolves to neither a screenshots folder nor a
+      steps narrative, repeat the question and wait again.
 
 ## 2. Validate the flow exists
 

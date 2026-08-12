@@ -31,11 +31,12 @@ It never modifies an existing flow doc; it only creates new ones.
    `"screenshots or figma Links/Login Flow"`, or the bare path all work the
    same way once stripped). This is the resolved **screenshots folder path**.
    If nothing is left after the first token is stripped, or the token is
-   empty, stop and report:
-   ```
-   Usage: /create_flow <screenshots-folder> ["precondition"] [--precondition "..."] [--notes "..."] [--title "..."] [--tags "a, b, c"]
-   The screenshots folder is mandatory.
-   ```
+   empty, do not stop with a usage error — ask instead, the same way `/run`
+   asks for a missing argument:
+   1. Print exactly: `Which screenshots folder would you like to use?`
+   2. Wait for the user's answer before continuing.
+   3. Strip the answer the same way (leading `@`, surrounding `[...]`/quotes).
+      If it's still empty after stripping, repeat the question and wait again.
 2. **Everything after the first token** is optional. Parse it as:
    - If it starts with `--`, parse `--precondition "..."`, `--steps "..."`,
      `--notes "..."`, `--title "..."`, `--tags "a, b, c"` (accept comma- or

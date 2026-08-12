@@ -12,6 +12,7 @@ The sibling **Book Truck** app (shipper-facing) is explicitly out of scope. `tes
 
 - `/list_flow` — table of every flow doc under `flow/*.md` and `tests/**/*.md`.
 - `/run [flow_name] [apk_name]` — the main entry point: validates the flow doc and an APK under `apk/`, then launches the environment, drives the flow, reports pass/fail, and always writes an HTML report.
+- `/sync_master [--merge] [--stash]` — brings this checkout up to date with `origin/master` via the one allowlisted script `.claude/scripts/sync_master.sh` (fetch + **fast-forward-only** update of local `master`; `--merge` then merges `master` into the current branch, `--stash` carries local edits across). It never rebases, resets, or force-pushes, and refuses rather than guessing when the tree is dirty or the branches have diverged. Use it instead of hand-typing `git checkout master && git fetch --all && git pull` — same allowlist reasoning as every other script here.
 - Everything else is invoked through skills/agents, not ad-hoc commands (see below) — there is no lint/build/test command because there is no code to lint/build/test.
 
 ## Architecture: skills, agents, and the "one fixed script" rule

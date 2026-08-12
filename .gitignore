@@ -31,3 +31,7 @@
 ### Python bytecode ###
 __pycache__/
 *.pyc
+
+### APK builds (large binaries — GitHub rejects >100 MB; keep them local only) ###
+apk/
+*.apk
